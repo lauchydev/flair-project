@@ -21,7 +21,7 @@ export default function ProductList({ products }: { products: Product[] }) {
               <Image
                 src={
                   product.image ||
-                  "https://placehold.co/200x200/000000/FFFFFF/png"
+                  "https://placehold.co/300x400/000000/FFFFFF/png"
                 }
                 alt={product.name}
                 fill

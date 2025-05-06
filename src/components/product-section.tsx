@@ -80,7 +80,7 @@ export default function ProductSection() {
     <section className="py-16 bg-white">
       <div className="container mx-auto px-4">
         <div className="mb-8">
-          <h2 className="text-2xl font-bold mb-6">Our Products</h2>
+          <h2 className="text-2xl font-bold mb-6 text-black">Our Products</h2>
 
           {/* Filter Toggles */}
           <div className="flex gap-4 mb-6">
