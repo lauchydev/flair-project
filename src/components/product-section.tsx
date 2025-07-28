@@ -4,69 +4,79 @@ import { useState } from "react";
 import ProductList from "./product-list";
 export default function ProductSection() {
   const [activeFilter, setActiveFilter] = useState("all");
+  const types = ["shirt", "bottle", "test"];
+
+  const getFilterLabel = (type: string) => {
+    const labels: { [key: string]: string } = {
+      [types[0]]: "Shirts",
+      [types[1]]: "Bottles",
+      [types[2]]: "Test",
+    };
+    return labels[type] || type.charAt(0).toUpperCase() + type.slice(1) + "s";
+  };
 
   const products = [
     {
-      id: 1,
-      name: "Custom Keychain 1",
+      id: crypto.randomUUID(),
+      name: "Custom Shirt 1",
       price: 2.99,
-      type: "keychain",
+      type: types[0],
       image: "",
     },
     {
-      id: 2,
-      name: "Custom Card 1",
+      id: crypto.randomUUID(),
+      name: "Custom Bottle 1",
       price: 3.99,
-      type: "card",
+      type: types[1],
       image: "",
     },
     {
-      id: 3,
-      name: "Custom Keychain 2",
+      id: crypto.randomUUID(),
+      name: "Custom Shirt 2",
       price: 2.99,
-      type: "keychain",
+      type: types[0],
       image: "",
     },
     {
-      id: 4,
-      name: "Custom Card 2",
+      id: crypto.randomUUID(),
+      name: "Custom Bottle 2",
       price: 3.99,
-      type: "card",
+      type: types[1],
       image: "",
     },
     {
-      id: 5,
-      name: "Custom Keychain 3",
+      id: crypto.randomUUID(),
+      name: "Custom Shirt 3",
       price: 2.99,
-      type: "keychain",
+      type: types[0],
       image: "",
     },
     {
-      id: 6,
-      name: "Custom Keychain 4",
+      id: crypto.randomUUID(),
+      name: "Custom Shirt 4",
       price: 2.99,
-      type: "keychain",
+      type: types[0],
       image: "",
     },
     {
-      id: 7,
-      name: "Custom Keychain 5",
+      id: crypto.randomUUID(),
+      name: "Custom Bottle 3",
       price: 2.99,
-      type: "keychain",
+      type: types[1],
       image: "",
     },
     {
-      id: 8,
-      name: "Custom Card 3",
+      id: crypto.randomUUID(),
+      name: "Custom Bottle 4",
       price: 3.99,
-      type: "card",
+      type: types[1],
       image: "",
     },
     {
-      id: 9,
-      name: "Custom Keychain 6",
+      id: crypto.randomUUID(),
+      name: "Custom Shirt 5",
       price: 2.99,
-      type: "keychain",
+      type: types[0],
       image: "",
     },
   ];
@@ -94,26 +104,19 @@ export default function ProductSection() {
             >
               All
             </button>
-            <button
-              onClick={() => setActiveFilter("keychain")}
-              className={`px-4 py-2 rounded-md ${
-                activeFilter === "keychain"
-                  ? "bg-gray-800 text-white"
-                  : "bg-gray-200 text-gray-800 hover:bg-gray-300"
-              }`}
-            >
-              Keychains
-            </button>
-            <button
-              onClick={() => setActiveFilter("card")}
-              className={`px-4 py-2 rounded-md ${
-                activeFilter === "card"
-                  ? "bg-gray-800 text-white"
-                  : "bg-gray-200 text-gray-800 hover:bg-gray-300"
-              }`}
-            >
-              Cards
-            </button>
+            {types.map((type) => (
+              <button
+                key={type}
+                onClick={() => setActiveFilter(type)}
+                className={`px-4 py-2 rounded-md ${
+                  activeFilter === type
+                    ? "bg-gray-800 text-white"
+                    : "bg-gray-200 text-gray-800 hover:bg-gray-300"
+                }`}
+              >
+                {getFilterLabel(type)}
+              </button>
+            ))}
           </div>
         </div>
 

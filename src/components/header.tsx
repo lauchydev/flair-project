@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ShoppingCartIcon } from "@heroicons/react/24/outline";
 
 export default function Header() {
   const pathname = usePathname();
@@ -51,17 +52,9 @@ export default function Header() {
 
           {/* Auth Buttons */}
           <div className="flex gap-4">
-            <Link
-              href="/login"
-              className="px-4 py-2 text-gray-700 hover:text-gray-900"
-            >
-              Login
-            </Link>
-            <Link
-              href="/register"
-              className="px-4 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-700"
-            >
-              Register
+            {/* Shopping Cart */}
+            <Link href="/cart">
+              <ShoppingCartIcon className="w-6 h-6 text-black" />
             </Link>
           </div>
         </div>

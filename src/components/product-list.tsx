@@ -1,8 +1,8 @@
 import Image from "next/image";
-import Link from "next/link"; 
+import Link from "next/link";
 
 interface Product {
-  id: number;
+  id: string;
   name: string;
   price: number;
   type: string;
@@ -29,7 +29,9 @@ export default function ProductList({ products }: { products: Product[] }) {
               </div>
               <div className="p-4">
                 <h3 className="font-medium text-gray-900">{product.name}</h3>
-                <p className="text-gray-700 mt-1">${product.price.toFixed(2)}</p>
+                <p className="text-gray-700 mt-1">
+                  ${product.price.toFixed(2)}
+                </p>
               </div>
             </div>
           </Link>
