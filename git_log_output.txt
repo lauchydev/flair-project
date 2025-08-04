@@ -1,0 +1,41 @@
+commit 942d2ba862a7c0bf285acbfbd18dc591a278ec5c
+Author: Lauchy <hello@lauchy.dev>
+Date:   Mon Jul 28 14:33:43 2025 +1000
+
+    Rework of items, streamlined the filter
+
+commit 1affc24cdc1c4eb2feb34ac567fe1d9397e826b0
+Author: kwunmanchau <kwunman.chau@griffithuni.edu.au>
+Date:   Fri Jul 25 00:43:50 2025 +1000
+
+    Rebuild login and admin pages
+
+commit bd7a6138d7f49423cce659ca8ebf389731a535fd
+Author: Jamie <jamiedaviddevoy@gmail.com>
+Date:   Sat May 24 17:58:54 2025 +1000
+
+    Changed colour selector and upload image button.
+
+commit 62b2a5390d01b34a489c5e9726b295ba89dc5c75
+Author: Jamie <jamiedaviddevoy@gmail.com>
+Date:   Fri May 23 09:39:23 2025 +1000
+
+    Added basic product customisation page with colour options and image upload link. No ability to view product yet.
+
+commit ba392a17be2dc74626240a169821df1c1aed4a9a
+Author: Lauchy <hello@lauchy.dev>
+Date:   Tue May 6 16:32:32 2025 +1000
+
+    Small formatting/placeholder fixes + Navbar path selection
+
+commit ac49885ca60a4b65cf51a0213ce38da728e2782e
+Author: Lauchy <hello@lauchy.dev>
+Date:   Tue May 6 16:12:01 2025 +1000
+
+    initial project setup
+
+commit d1520ba6acb3613b711f0f0cd1be0a832d29349b
+Author: Lauchy <hello@lauchy.dev>
+Date:   Tue May 6 15:59:11 2025 +1000
+
+    Initial commit from Create Next App

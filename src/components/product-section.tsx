@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import ProductList from "./product-list";
 export default function ProductSection() {
   const [activeFilter, setActiveFilter] = useState("all");
@@ -15,7 +15,8 @@ export default function ProductSection() {
     return labels[type] || type.charAt(0).toUpperCase() + type.slice(1) + "s";
   };
 
-  const products = [
+
+const products = useMemo(() => [
     {
       id: crypto.randomUUID(),
       name: "Custom Shirt 1",
@@ -79,7 +80,8 @@ export default function ProductSection() {
       type: types[0],
       image: "",
     },
-  ];
+  ], []);
+
 
   const filteredProducts =
     activeFilter === "all"
