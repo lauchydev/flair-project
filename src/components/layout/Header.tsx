@@ -19,9 +19,9 @@ export default function Header() {
             <ul className="flex gap-8">
               <li>
                 <Link
-                  href="/home"
+                  href="/"
                   className={`text-gray-800 hover:text-gray-600 hover:bg-gray-200 px-3 py-2 rounded-md font-medium ${
-                    pathname === "/home" ? "bg-gray-100" : ""
+                    pathname === "/" ? "bg-gray-100" : ""
                   }`}
                 >
                   Home
@@ -29,22 +29,12 @@ export default function Header() {
               </li>
               <li>
                 <Link
-                  href="/"
+                  href="/products"
                   className={`text-gray-800 hover:text-gray-600 hover:bg-gray-200 px-3 py-2 rounded-md font-medium ${
-                    pathname === "/" ? "bg-gray-100" : ""
+                    pathname === "/products" ? "bg-gray-100" : ""
                   }`}
                 >
                   Products
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/landing"
-                  className={`text-gray-800 hover:text-gray-600 hover:bg-gray-200 px-3 py-2 rounded-md font-medium ${
-                    pathname === "/landing" ? "bg-gray-100" : ""
-                  }`}
-                >
-                  Landing Page
                 </Link>
               </li>
             </ul>
