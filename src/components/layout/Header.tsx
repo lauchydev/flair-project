@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ShoppingCartIcon, UserIcon } from "@heroicons/react/24/outline";
 
 export default function Header() {
   const pathname = usePathname();
@@ -18,9 +19,9 @@ export default function Header() {
             <ul className="flex gap-8">
               <li>
                 <Link
-                  href="/home"
+                  href="/"
                   className={`text-gray-800 hover:text-gray-600 hover:bg-gray-200 px-3 py-2 rounded-md font-medium ${
-                    pathname === "/home" ? "bg-gray-100" : ""
+                    pathname === "/" ? "bg-gray-100" : ""
                   }`}
                 >
                   Home
@@ -28,22 +29,12 @@ export default function Header() {
               </li>
               <li>
                 <Link
-                  href="/"
+                  href="/products"
                   className={`text-gray-800 hover:text-gray-600 hover:bg-gray-200 px-3 py-2 rounded-md font-medium ${
-                    pathname === "/" ? "bg-gray-100" : ""
+                    pathname === "/products" ? "bg-gray-100" : ""
                   }`}
                 >
                   Products
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/landing"
-                  className={`text-gray-800 hover:text-gray-600 hover:bg-gray-200 px-3 py-2 rounded-md font-medium ${
-                    pathname === "/landing" ? "bg-gray-100" : ""
-                  }`}
-                >
-                  Landing Page
                 </Link>
               </li>
             </ul>
@@ -51,18 +42,15 @@ export default function Header() {
 
           {/* Auth Buttons */}
           <div className="flex gap-4">
-            <Link
-              href="/login"
-              className="px-4 py-2 text-gray-700 hover:text-gray-900"
-            >
-              Login
+            {/* Shopping Cart */}
+            <Link href="/cart">
+              <ShoppingCartIcon className="w-6 h-6 text-black" />
             </Link>
-            <Link
-              href="/register"
-              className="px-4 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-700"
-            >
-              Register
-            </Link>
+
+            {/* User Icon */}
+          <Link href="/login">
+            <UserIcon className="w-6 h-6 text-black hover:text-gray-700" />
+          </Link>
           </div>
         </div>
       </div>
