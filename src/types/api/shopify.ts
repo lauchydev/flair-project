@@ -56,6 +56,12 @@ export interface ShopifyProduct {
       node: ShopifyVariant;
     }>;
   };
+  // Product Metafields from shopify
+  fontPriceVar?: { value: string; type: string } | null;
+  customImage?: { value: string; type: string } | null;
+  customText?: { value: string; type: string } | null;
+  customColour?: { value: string; type: string } | null;
+  coloursAvailable?: { value: string; type: string } | null;
 }
 
 export interface ShopifyProductsResponse {

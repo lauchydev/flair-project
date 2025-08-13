@@ -22,6 +22,18 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
   const [quantity, setQuantity] = useState<number>(1);
   const variantEdges = product.variants.edges;
 
+  // Feature flags from product metafields (exposed to Storefront API)
+  const enableCustomImage = (product.customImage?.value || "true").toLowerCase() === "true";
+  const enableCustomText = (product.customText?.value || "true").toLowerCase() === "true";
+  const enableCustomColour = (product.customColour?.value || "true").toLowerCase() === "true";
+  const availableColours: string[] = useMemo(() => {
+    const raw = product.coloursAvailable?.value?.trim();
+    if (!raw) {
+      return ["#000000"];
+    }
+    return raw.split(/[,;\s]+/).filter(Boolean);
+  }, [product.coloursAvailable?.value]);
+
   const selectedVariant: ShopifyVariant | null = useMemo(() => {
     return (
       product.variants.edges.find((e) => e.node.id === selectedVariantId)
@@ -32,9 +44,16 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
   // Dynamic Pricing
   const priceDisplay = useMemo(() => {
     const base = selectedVariant?.price ?? product.priceRange.minVariantPrice;
-    // Add dynamic pricing options
-    return `$${base.amount} ${base.currencyCode}`;
-  }, [selectedVariant, product.priceRange.minVariantPrice]);
+    const baseAmount = parseFloat(base.amount);
+    let extra = 0;
+    // Example: font price variable cost per character when custom text is enabled
+    const pricePerChar = parseFloat(product.fontPriceVar?.value || "0");
+    if (enableCustomText && customText) {
+      extra += isNaN(pricePerChar) ? 0 : pricePerChar * customText.length;
+    }
+    const total = Math.max(0, baseAmount + extra);
+    return `$${total.toFixed(2)} ${base.currencyCode}`;
+  }, [selectedVariant, product.priceRange.minVariantPrice, enableCustomText, customText, product.fontPriceVar?.value]);
 
   const optionNames = useMemo(
     () =>
@@ -145,12 +164,12 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
             </section>
             )}
 
-            {/* Colour switch */}
-            <section className="rounded-3xl border-4 border-black bg-white p-5 shadow-xl">
-              <h2 className="mb-3 text-lg font-black text-black">Color</h2>
-              <div className="grid grid-cols-8 gap-2">
-                {["#111827", "#9CA3AF", "#EF4444", "#0EA5E9", "#22C55E", "#F59E0B", "#F472B6", "#14B8A6"].map(
-                  (hex) => (
+            {/* Colour switch (metafield controlled) */}
+            {enableCustomColour && (
+              <section className="rounded-3xl border-4 border-black bg-white p-5 shadow-xl">
+                <h2 className="mb-3 text-lg font-black text-black">Color</h2>
+                <div className="grid grid-cols-8 gap-2">
+                  {availableColours.map((hex) => (
                     <button
                       key={hex}
                       aria-label={`Select color ${hex}`}
@@ -160,45 +179,49 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                       }`}
                       style={{ backgroundColor: hex }}
                     />
-                  )
-                )}
-              </div>
-            </section>
-
-            {/* Upload image */}
-            <section className="rounded-3xl border-4 border-black bg-white p-5 shadow-xl">
-              <h2 className="mb-3 text-lg font-black text-black">Add image</h2>
-              <label className="block cursor-pointer rounded-xl border-2 border-dashed border-black p-4 text-center font-bold text-gray-700 hover:bg-gray-50">
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    const url = URL.createObjectURL(file);
-                    setUploadedImage(url);
-                  }}
-                />
-                Click to upload
-              </label>
-              {uploadedImage && (
-                <div className="mt-3 relative h-24 w-full overflow-hidden rounded-xl border-2 border-black">
-                  <img src={uploadedImage} alt="Uploaded" className="h-full w-full object-cover" />
+                  ))}
                 </div>
-              )}
-            </section>
+              </section>
+            )}
 
-            {/* Add text */}
-            <section className="rounded-3xl border-4 border-black bg-white p-5 shadow-xl">
-              <h2 className="mb-3 text-lg font-black text-black">Add text</h2>
-              <input
-                value={customText}
-                onChange={(e) => setCustomText(e.target.value)}
-                placeholder="Type your text"
-                className="w-full rounded-xl border-2 border-black px-3 py-2 font-semibold placeholder-gray-400 focus:outline-none"
-              />
-            </section>
+            {/* Upload image (metafield controlled) */}
+            {enableCustomImage && (
+              <section className="rounded-3xl border-4 border-black bg-white p-5 shadow-xl">
+                <h2 className="mb-3 text-lg font-black text-black">Add image</h2>
+                <label className="block cursor-pointer rounded-xl border-2 border-dashed border-black p-4 text-center font-bold text-gray-700 hover:bg-gray-50">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const url = URL.createObjectURL(file);
+                      setUploadedImage(url);
+                    }}
+                  />
+                  Click to upload
+                </label>
+                {uploadedImage && (
+                  <div className="mt-3 relative h-24 w-full overflow-hidden rounded-xl border-2 border-black">
+                    <img src={uploadedImage} alt="Uploaded" className="h-full w-full object-cover" />
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* Add text (metafield controlled) */}
+            {enableCustomText && (
+              <section className="rounded-3xl border-4 border-black bg-white p-5 shadow-xl">
+                <h2 className="mb-3 text-lg font-black text-black">Add text</h2>
+                <input
+                  value={customText}
+                  onChange={(e) => setCustomText(e.target.value)}
+                  placeholder="Type your text"
+                  className="w-full rounded-xl border-2 border-black px-3 py-2 font-semibold placeholder-gray-400 focus:outline-none"
+                />
+              </section>
+            )}
 
             {/* Price + Actions bar */}
             <section>
@@ -261,7 +284,7 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
             <div className="rounded-3xl border-4 border-black bg-white p-4 shadow-xl">
               {/* View switcher */}
               <div className="mb-3 flex gap-2 justify-center">
-                {(["front", "back", "left", "right"] as ViewPose[]).map(
+                {(function(){ const views: ViewPose[] = ["front","back","left","right"]; return views;})().map(
                   (pose) => (
                     <button
                       key={pose}

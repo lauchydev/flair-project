@@ -19,6 +19,21 @@ const VALIDATED_STORE_DOMAIN: string = SHOPIFY_STORE_DOMAIN;
 const VALIDATED_STOREFRONT_TOKEN: string = SHOPIFY_STOREFRONT_TOKEN;
 
 // GraphQL queries
+const CUSTOMIZER_NAMESPACE =
+  process.env.NEXT_PUBLIC_CUSTOMIZER_NAMESPACE || "custom";
+const CUSTOMIZER_KEYS = {
+  fontPriceVariable:
+    process.env.NEXT_PUBLIC_CUSTOMIZER_KEY_FONT_PRICE || "font_price_variable",
+  customImage:
+    process.env.NEXT_PUBLIC_CUSTOMIZER_KEY_CUSTOM_IMAGE || "custom_image",
+  customText:
+    process.env.NEXT_PUBLIC_CUSTOMIZER_KEY_CUSTOM_TEXT || "custom_text",
+  customColour:
+    process.env.NEXT_PUBLIC_CUSTOMIZER_KEY_CUSTOM_COLOUR || "custom_colour",
+  coloursAvailable:
+    process.env.NEXT_PUBLIC_CUSTOMIZER_KEY_COLOURS_AVAILABLE ||
+    "colours_available",
+};
 const GET_PRODUCTS_QUERY = `
   query getProducts($first: Int!) {
     products(first: $first) {
@@ -84,7 +99,7 @@ const GET_PRODUCTS_QUERY = `
 `;
 
 const GET_PRODUCT_QUERY = `
-  query getProduct($handle: String!) {
+  query getProduct($handle: String!, $ns: String!, $k1: String!, $k2: String!, $k3: String!, $k4: String!, $k5: String!) {
     productByHandle(handle: $handle) {
       id
       title
@@ -143,6 +158,11 @@ const GET_PRODUCT_QUERY = `
           }
         }
       }
+      fontPriceVar: metafield(namespace: $ns, key: $k1) { value type }
+      customImage: metafield(namespace: $ns, key: $k2) { value type }
+      customText: metafield(namespace: $ns, key: $k3) { value type }
+      customColour: metafield(namespace: $ns, key: $k4) { value type }
+      coloursAvailable: metafield(namespace: $ns, key: $k5) { value type }
     }
   }
 `;
@@ -205,7 +225,15 @@ export class ShopifyAPI {
    * Get single product by handle
    */
   async getProduct(handle: string) {
-    return this.query(GET_PRODUCT_QUERY, { handle });
+    return this.query(GET_PRODUCT_QUERY, {
+      handle,
+      ns: CUSTOMIZER_NAMESPACE,
+      k1: CUSTOMIZER_KEYS.fontPriceVariable,
+      k2: CUSTOMIZER_KEYS.customImage,
+      k3: CUSTOMIZER_KEYS.customText,
+      k4: CUSTOMIZER_KEYS.customColour,
+      k5: CUSTOMIZER_KEYS.coloursAvailable,
+    });
   }
 }
 
