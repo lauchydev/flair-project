@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import type { ShopifyProduct, ShopifyVariant } from "@/types/api/shopify";
+import { getAvailableViewsForProduct } from "@/lib/customizer/config";
 
 type ViewPose = "front" | "back" | "left" | "right";
 
@@ -10,29 +11,110 @@ interface ProductCustomizerProps {
   product: ShopifyProduct;
 }
 
+// Helper function to parse metafield boolean values
+function parseMetafieldBoolean(value: string | null | undefined, defaultValue: boolean = true): boolean {
+  if (!value) return defaultValue;
+  return value.toLowerCase() === "true";
+}
+
+// Helper function to parse color values from metafield
+function parseColorMetafield(value: string | null | undefined): string[] {
+  if (!value || !value.trim()) {
+    return [];
+  }
+
+  const trimmed = value.trim();
+
+  if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .filter((c: unknown) => typeof c === "string")
+          .map((c: string) => c.trim())
+          .filter(Boolean)
+          .map((c: string) => {
+            if (/^#?[0-9A-Fa-f]{3}$/.test(c) || /^#?[0-9A-Fa-f]{6}$/.test(c)) {
+              return c.startsWith("#") ? c : `#${c}`;
+            }
+            return c;
+          });
+      }
+    } catch {
+    }
+  }
+
+  // Fallback string manipulation for hex codes
+  const cleaned = trimmed.replace(/[\[\]"']/g, "");
+  return cleaned
+    .split(/[,;\s]+/)
+    .map((c) => c.trim())
+    .filter(Boolean)
+    .map((c) => {
+      if (/^#?[0-9A-Fa-f]{3}$/.test(c) || /^#?[0-9A-Fa-f]{6}$/.test(c)) {
+        return c.startsWith("#") ? c : `#${c}`;
+      }
+      return c;
+    });
+}
+
+// Helper function to parse price modifier from metafield
+function parsePriceModifier(value: string | null | undefined): number {
+  if (!value) return 0;
+  const parsed = parseFloat(value);
+  return isNaN(parsed) ? 0 : Math.max(0, parsed);
+}
+
 export default function ProductCustomizer({ product }: ProductCustomizerProps) {
-  
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(
     product.variants.edges[0]?.node.id ?? null
   );
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
-  const [selectedView, setSelectedView] = useState<ViewPose>("front");
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [customText, setCustomText] = useState<string>("");
   const [quantity, setQuantity] = useState<number>(1);
   const variantEdges = product.variants.edges;
 
-  // Feature flags from product metafields (exposed to Storefront API)
-  const enableCustomImage = (product.customImage?.value || "true").toLowerCase() === "true";
-  const enableCustomText = (product.customText?.value || "true").toLowerCase() === "true";
-  const enableCustomColour = (product.customColour?.value || "true").toLowerCase() === "true";
-  const availableColours: string[] = useMemo(() => {
-    const raw = product.coloursAvailable?.value?.trim();
-    if (!raw) {
-      return ["#000000"];
+  // Get available views for this product
+  const availableViews = useMemo(
+    () => getAvailableViewsForProduct(product),
+    [product]
+  );
+  const [selectedView, setSelectedView] = useState<ViewPose>(availableViews[0]);
+
+  // Ensure selected view is valid when product changes
+  useEffect(() => {
+    if (!availableViews.includes(selectedView)) {
+      setSelectedView(availableViews[0]);
     }
-    return raw.split(/[,;\s]+/).filter(Boolean);
-  }, [product.coloursAvailable?.value]);
+  }, [availableViews, selectedView]);
+
+  // Feature flags from product metafields
+  const enableCustomImage = parseMetafieldBoolean(product.customImage?.value);
+  const enableCustomText = parseMetafieldBoolean(product.customText?.value);
+  const enableCustomColour = parseMetafieldBoolean(product.customColour?.value);
+  
+  // Parse available colors from metafield
+  const availableColours = useMemo(() => 
+    parseColorMetafield(product.coloursAvailable?.value),
+    [product.coloursAvailable?.value]
+  );
+
+  // Price for text
+  const fontPrice = useMemo(
+    () => parsePriceModifier(product.fontPriceVar?.value),
+    [product.fontPriceVar?.value]
+  );
+
+  // TODO: Adjust with metafield 
+  const imagePrice = 5;
+
+  // Set initial color if available
+  useEffect(() => {
+    if (availableColours.length > 0 && !selectedColor) {
+      setSelectedColor(availableColours[0]);
+    }
+  }, [availableColours, selectedColor]);
 
   const selectedVariant: ShopifyVariant | null = useMemo(() => {
     return (
@@ -41,20 +123,36 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
     );
   }, [product.variants.edges, selectedVariantId]);
 
-  // Dynamic Pricing
+  // Dynamic Pricing with metafield support
   const priceDisplay = useMemo(() => {
     const base = selectedVariant?.price ?? product.priceRange.minVariantPrice;
     const baseAmount = parseFloat(base.amount);
     let extra = 0;
-    // Example: font price variable cost per character when custom text is enabled
-    const pricePerChar = parseFloat(product.fontPriceVar?.value || "0");
+    
+    // Text pricing from metafield
+    const pricePerChar = parsePriceModifier(product.fontPriceVar?.value);
     if (enableCustomText && customText) {
-      extra += isNaN(pricePerChar) ? 0 : pricePerChar * customText.length;
+      extra += pricePerChar
     }
+    
+    // Image upload pricing (add metafield price like above)
+    if (enableCustomImage && uploadedImage) {
+      extra += 5;
+    }
+    
     const total = Math.max(0, baseAmount + extra);
     return `$${total.toFixed(2)} ${base.currencyCode}`;
-  }, [selectedVariant, product.priceRange.minVariantPrice, enableCustomText, customText, product.fontPriceVar?.value]);
+  }, [
+    selectedVariant, 
+    product.priceRange.minVariantPrice, 
+    enableCustomText, 
+    customText, 
+    product.fontPriceVar?.value,
+    enableCustomImage,
+    uploadedImage
+  ]);
 
+  // Variant selection logic
   const optionNames = useMemo(
     () =>
       Array.from(
@@ -64,6 +162,7 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
       ),
     [variantEdges]
   );
+  
   const optionValues = useMemo(() => {
     const map: Record<string, string[]> = {};
     optionNames.forEach(name => {
@@ -109,7 +208,6 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
         o.name === name ? o.value === value : selectedOptions[o.name] ? o.value === selectedOptions[o.name] : true
       )
     );
-  
 
   return (
     <div className="bg-gradient-to-b from-yellow-50 to-purple-50 py-10">
@@ -129,55 +227,53 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
           {/* Controls Panel */}
           <aside className="lg:col-span-4 space-y-6">
             {/* Variant select (size, etc.) */}
-
             {optionNames.length > 0 || !optionNames.every(name => name === "Default Title") && (
-            <section className="rounded-3xl border-4 border-black bg-white p-5 shadow-xl">
+              <section className="rounded-3xl border-4 border-black bg-white p-5 shadow-xl">
                 <h2 className="mb-3 text-lg font-black text-black">Options</h2>
-
                 {optionNames.map((name) => (
-                <div key={name} className="mb-3">
+                  <div key={name} className="mb-3">
                     <div className="mb-2 text-xs font-extrabold text-gray-700 uppercase tracking-wide">{name}</div>
                     <div className="flex flex-wrap gap-2">
-                    {optionValues[name].map((value) => {
+                      {optionValues[name].map((value) => {
                         const active = selectedOptions[name] === value;
                         const available = isOptionAvailable(name, value);
                         return (
-                        <button
+                          <button
                             key={value}
                             disabled={!available}
                             onClick={() =>
-                            setSelectedOptions((prev) => ({ ...prev, [name]: value }))
+                              setSelectedOptions((prev) => ({ ...prev, [name]: value }))
                             }
                             className={`rounded-xl border-2 px-3 py-2 text-sm font-extrabold ${
-                            active
+                              active
                                 ? "bg-purple-500 text-white border-black"
                                 : "bg-white text-black border-black hover:bg-gray-50"
                             } ${!available ? "opacity-50 cursor-not-allowed" : ""}`}
-                        >
+                          >
                             {value}
-                        </button>
+                          </button>
                         );
-                    })}
+                      })}
                     </div>
-                </div>
+                  </div>
                 ))}
-            </section>
+              </section>
             )}
 
-            {/* Colour switch (metafield controlled) */}
-            {enableCustomColour && (
+            {/* Color selection (metafield controlled) */}
+            {enableCustomColour && availableColours.length > 0 && (
               <section className="rounded-3xl border-4 border-black bg-white p-5 shadow-xl">
                 <h2 className="mb-3 text-lg font-black text-black">Color</h2>
                 <div className="grid grid-cols-8 gap-2">
-                  {availableColours.map((hex) => (
+                  {availableColours.map((color) => (
                     <button
-                      key={hex}
-                      aria-label={`Select color ${hex}`}
-                      onClick={() => setSelectedColor(hex)}
-                      className={`h-8 w-8 rounded-full border-2 border-black shadow ${
-                        selectedColor === hex ? "ring-4 ring-purple-400" : ""
+                      key={color}
+                      aria-label={`Select color ${color}`}
+                      onClick={() => setSelectedColor(color)}
+                      className={`h-8 w-8 rounded-full border-2 border-black shadow transition-all ${
+                        selectedColor === color ? "ring-4 ring-purple-400 scale-110" : "hover:scale-105"
                       }`}
-                      style={{ backgroundColor: hex }}
+                      style={{ backgroundColor: color }}
                     />
                   ))}
                 </div>
@@ -187,8 +283,16 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
             {/* Upload image (metafield controlled) */}
             {enableCustomImage && (
               <section className="rounded-3xl border-4 border-black bg-white p-5 shadow-xl">
-                <h2 className="mb-3 text-lg font-black text-black">Add image</h2>
-                <label className="block cursor-pointer rounded-xl border-2 border-dashed border-black p-4 text-center font-bold text-gray-700 hover:bg-gray-50">
+                <h2 className="mb-3 text-lg font-black text-black">
+                  Add image
+                  {/* TODO: Check if price for image uploading? */}
+                  {(
+                    <span className="ml-2 align-baseline text-xs font-semibold text-gray-500">
+                      +$4.99
+                    </span>
+                  )}
+                  </h2>
+                <label className="block cursor-pointer rounded-xl border-2 border-dashed border-black p-4 text-center font-bold text-gray-700 hover:bg-gray-50 transition-colors">
                   <input
                     type="file"
                     accept="image/*"
@@ -200,11 +304,19 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                       setUploadedImage(url);
                     }}
                   />
-                  Click to upload
+                  {uploadedImage ? "Change image" : "Click to upload"}
                 </label>
                 {uploadedImage && (
-                  <div className="mt-3 relative h-24 w-full overflow-hidden rounded-xl border-2 border-black">
-                    <img src={uploadedImage} alt="Uploaded" className="h-full w-full object-cover" />
+                  <div className="mt-3 relative">
+                    <div className="relative h-24 w-full overflow-hidden rounded-xl border-2 border-black">
+                      <img src={uploadedImage} alt="Uploaded" className="h-full w-full object-cover" />
+                    </div>
+                    <button
+                      onClick={() => setUploadedImage(null)}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold hover:bg-red-600"
+                    >
+                      ×
+                    </button>
                   </div>
                 )}
               </section>
@@ -213,12 +325,20 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
             {/* Add text (metafield controlled) */}
             {enableCustomText && (
               <section className="rounded-3xl border-4 border-black bg-white p-5 shadow-xl">
-                <h2 className="mb-3 text-lg font-black text-black">Add text</h2>
+                <h2 className="mb-3 text-lg font-black text-black">
+                  Add text
+                  {/* TODO: Either add price for text or price per character added (Discuss in next meeting) */}
+                  {fontPrice > 0 && (
+                    <span className="ml-2 align-baseline text-xs font-semibold text-gray-500">
+                      +${fontPrice.toFixed(2)}
+                    </span>
+                  )}
+                </h2>
                 <input
                   value={customText}
                   onChange={(e) => setCustomText(e.target.value)}
                   placeholder="Type your text"
-                  className="w-full rounded-xl border-2 border-black px-3 py-2 font-semibold placeholder-gray-400 focus:outline-none"
+                  className="w-full rounded-xl border-2 border-black px-3 py-2 font-semibold text-black placeholder-gray-400 focus:outline-none focus:border-purple-500"
                 />
               </section>
             )}
@@ -230,7 +350,7 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                 <div className="flex items-center rounded-xl border-2 border-black group">
                   <button
                     aria-label="Decrease quantity"
-                    className="px-3 py-2 font-black text-black hover:bg-gray-100"
+                    className="px-3 py-2 font-black text-black hover:bg-gray-100 transition-colors"
                     onClick={() => setQuantity((q) => Math.max(1, q - 1))}
                   >
                     −
@@ -238,7 +358,7 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                   <div className="min-w-10 text-center font-extrabold text-black">{quantity}</div>
                   <button
                     aria-label="Increase quantity"
-                    className="px-3 py-2 font-black text-black hover:bg-gray-100"
+                    className="px-3 py-2 font-black text-black hover:bg-gray-100 transition-colors"
                     onClick={() => setQuantity((q) => Math.min(99, q + 1))}
                   >
                     +
@@ -247,9 +367,9 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
 
                 {/* Add to cart button */}
                 <button
-                  className="flex-1 rounded-2xl border-4 border-black bg-purple-600 px-4 py-3 text-center font-black text-white shadow-xl hover:bg-purple-500"
+                  className="flex-1 rounded-2xl border-4 border-black bg-purple-600 px-4 py-3 text-center font-black text-white shadow-xl hover:bg-purple-500 transition-colors"
                   onClick={() => {
-                    // TODO: Shopify cart
+                    // TODO: Implement Shopify cart with metafield attributes
                     console.log("Add to cart clicked", {
                       quantity,
                       selectedVariantId,
@@ -257,6 +377,13 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                       selectedView,
                       uploadedImage,
                       customText,
+                      // Preparation for cart (line attributes in shopify)
+                      metafields: {
+                        custom_text: customText,
+                        custom_color: selectedColor,
+                        custom_image: uploadedImage,
+                        selected_view: selectedView,
+                      }
                     });
                   }}
                 >
@@ -274,36 +401,29 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
             </section>
           </aside>
 
-
-
-
-
-
           {/* Preview Panel */}
           <section className="lg:col-span-8">
             <div className="rounded-3xl border-4 border-black bg-white p-4 shadow-xl">
               {/* View switcher */}
               <div className="mb-3 flex gap-2 justify-center">
-                {(function(){ const views: ViewPose[] = ["front","back","left","right"]; return views;})().map(
-                  (pose) => (
-                    <button
-                      key={pose}
-                      onClick={() => setSelectedView(pose)}
-                      className={`rounded-xl border-2 px-3 py-2 text-xs font-black uppercase tracking-wide cursor-pointer ${
-                        selectedView === pose
-                          ? "bg-lime-400 text-black border-black"
-                          : "bg-white text-black border-black hover:bg-gray-50"
-                      }`}
-                    >
-                      {pose}
-                    </button>
-                  )
-                )}
+                {availableViews.map((pose) => (
+                  <button
+                    key={pose}
+                    onClick={() => setSelectedView(pose)}
+                    className={`rounded-xl border-2 px-3 py-2 text-xs font-black uppercase tracking-wide cursor-pointer transition-colors ${
+                      selectedView === pose
+                        ? "bg-lime-400 text-black border-black"
+                        : "bg-white text-black border-black hover:bg-gray-50"
+                    }`}
+                  >
+                    {pose}
+                  </button>
+                ))}
               </div>
 
               {/* Canvas area */}
               <div className="relative h-[50vh] lg:h-[70vh] w-full overflow-hidden rounded-2xl border-2 border-black bg-gradient-to-br from-gray-50 to-gray-100">
-                {/* Base product image (simple placeholder: featured image) */}
+                {/* Base product image */}
                 {product.featuredImage && (
                   <Image
                     src={product.featuredImage.url}
@@ -314,7 +434,7 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                   />
                 )}
 
-                {/* Color overlay demo */}
+                {/* Color overlay */}
                 {selectedColor && (
                   <div
                     className="absolute inset-0 mix-blend-multiply opacity-60"
@@ -322,26 +442,32 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                   />
                 )}
 
-                {/* Text overlay demo */}
+                {/* Text overlay */}
                 {customText && (
                   <div className="absolute bottom-6 left-1/2 -translate-x-1/2 rounded-xl border-2 border-black bg-white/70 px-3 py-1 text-sm font-black text-black shadow">
                     {customText}
                   </div>
                 )}
 
-                {/* Image overlay demo */}
+                {/* Image overlay */}
                 {uploadedImage && (
                   <img
                     src={uploadedImage}
-                    alt="Overlay"
+                    alt="Custom overlay"
                     className="absolute right-6 top-6 h-24 w-24 rounded-lg border-2 border-black object-cover shadow"
                   />
                 )}
+
+                {/* View indicator */}
+                <div className="pointer-events-none absolute left-4 top-4 rounded-lg bg-white/70 px-2 py-1 text-xs font-black text-gray-700">
+                  {selectedView}
+                </div>
               </div>
 
               {/* Selection summary */}
               <div className="mt-4 text-sm font-extrabold text-gray-700">
                 Selected: {selectedVariant?.title || "Default"} • View: {selectedView}
+                {selectedColor && ` • Color: ${selectedColor}`}
               </div>
             </div>
           </section>
