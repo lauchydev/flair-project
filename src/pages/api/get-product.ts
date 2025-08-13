@@ -1,10 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  res.setHeader("Cache-Control", "no-store"); 
+  res.setHeader("Cache-Control", "no-store");
 
   const { id } = req.query;
-
   if (!id || typeof id !== "string") {
     return res.status(400).json({ error: "Missing product ID" });
   }
@@ -15,23 +14,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         id
         title
         description
-        images(first: 5) {
-          edges {
-            node {
-              url      # modern field
-              src      # legacy fallback
-              altText
-            }
-          }
+        descriptionHtml
+        images(first: 5) { edges { node { url src altText } } }
+        variants(first: 10) { edges { node { id title price } } }
+
+        # Your metafields (namespace: custom)
+        ci: metafield(namespace: "custom", key: "custom_image") {
+          id namespace key type value
         }
-        variants(first: 10) {
-          edges {
-            node {
-              id
-              title
-              price
-            }
-          }
+        ct: metafield(namespace: "custom", key: "custom_text") {
+          id namespace key type value
+        }
+        cc: metafield(namespace: "custom", key: "color_customisation") {
+          id namespace key type value
+        }
+        ca: metafield(namespace: "custom", key: "colours_available") {
+          id namespace key type value
         }
       }
     }
@@ -51,7 +49,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     );
 
     const json = await response.json();
-
     if (!response.ok) {
       return res.status(500).json({ error: `Shopify error: ${response.statusText}` });
     }
