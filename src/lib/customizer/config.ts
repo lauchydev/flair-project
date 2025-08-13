@@ -14,7 +14,7 @@ const PRODUCT_VIEW_CONFIG: Record<string, ProductViewConfig> = {
 
 const PRODUCT_TYPE_CONFIG: Record<string, ProductViewConfig> = {
   // e.g., T-Shirt-like products
-  TSHIRT: { views: ["front", "back", "left", "right"] },
+  TEE: { views: ["front", "back", "left", "right"] },
   BOTTLE: { views: ["front", "back"] },
 };
 
