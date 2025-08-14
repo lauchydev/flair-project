@@ -1,39 +1,32 @@
 /**
  * Shopify Storefront API Client
- * Handles all Shopify API interactions with proper error handling
- */
+ * Handles all Shopify API interactions
+*/
 
 // Environment variables validation
 const SHOPIFY_STORE_DOMAIN = process.env.NEXT_PUBLIC_SHOPIFY_STORE_DOMAIN;
-const SHOPIFY_STOREFRONT_TOKEN =
-  process.env.NEXT_PUBLIC_SHOPIFY_STOREFRONT_TOKEN;
+const SHOPIFY_STOREFRONT_TOKEN = process.env.NEXT_PUBLIC_SHOPIFY_STOREFRONT_TOKEN;
 
+  // Check if .env.local file exists and is setup correctly
 if (!SHOPIFY_STORE_DOMAIN || !SHOPIFY_STOREFRONT_TOKEN) {
   throw new Error(
-    "Missing required environment variables: NEXT_PUBLIC_SHOPIFY_STORE_DOMAIN and NEXT_PUBLIC_SHOPIFY_STOREFRONT_TOKEN"
+    "Check github and add the '.env.local' file to the root"
+    // "Missing required environment variables: NEXT_PUBLIC_SHOPIFY_STORE_DOMAIN and NEXT_PUBLIC_SHOPIFY_STOREFRONT_TOKEN"
   );
 }
-
 // Validated environment variables
 const VALIDATED_STORE_DOMAIN: string = SHOPIFY_STORE_DOMAIN;
 const VALIDATED_STOREFRONT_TOKEN: string = SHOPIFY_STOREFRONT_TOKEN;
 
-// GraphQL queries
-const CUSTOMIZER_NAMESPACE =
-  process.env.NEXT_PUBLIC_CUSTOMIZER_NAMESPACE || "custom";
-const CUSTOMIZER_KEYS = {
-  fontPriceVariable:
-    process.env.NEXT_PUBLIC_CUSTOMIZER_KEY_FONT_PRICE || "font_price_variable",
-  customImage:
-    process.env.NEXT_PUBLIC_CUSTOMIZER_KEY_CUSTOM_IMAGE || "custom_image",
-  customText:
-    process.env.NEXT_PUBLIC_CUSTOMIZER_KEY_CUSTOM_TEXT || "custom_text",
-  customColour:
-    process.env.NEXT_PUBLIC_CUSTOMIZER_KEY_CUSTOM_COLOUR || "custom_colour",
-  coloursAvailable:
-    process.env.NEXT_PUBLIC_CUSTOMIZER_KEY_COLOURS_AVAILABLE ||
-    "colours_available",
-};
+
+// Metafield Config
+import {
+  CUSTOMIZER_NAMESPACE,
+  METAFIELD_KEYS,
+  METAFIELDS,
+} from "@/client/lib/shopify/metafields";
+
+
 const GET_PRODUCTS_QUERY = `
   query getProducts($first: Int!) {
     products(first: $first) {
@@ -99,7 +92,7 @@ const GET_PRODUCTS_QUERY = `
 `;
 
 const GET_PRODUCT_QUERY = `
-  query getProduct($handle: String!, $ns: String!, $k1: String!, $k2: String!, $k3: String!, $k4: String!, $k5: String!) {
+  query getProduct($handle: String!, $identifiers: [HasMetafieldsIdentifier!]!) {
     productByHandle(handle: $handle) {
       id
       title
@@ -158,11 +151,12 @@ const GET_PRODUCT_QUERY = `
           }
         }
       }
-      fontPriceVar: metafield(namespace: $ns, key: $k1) { value type }
-      customImage: metafield(namespace: $ns, key: $k2) { value type }
-      customText: metafield(namespace: $ns, key: $k3) { value type }
-      customColour: metafield(namespace: $ns, key: $k4) { value type }
-      coloursAvailable: metafield(namespace: $ns, key: $k5) { value type }
+      metafields(identifiers: $identifiers) {
+        key
+        namespace
+        type
+        value
+      }
     }
   }
 `;
@@ -225,15 +219,30 @@ export class ShopifyAPI {
    * Get single product by handle
    */
   async getProduct(handle: string) {
-    return this.query(GET_PRODUCT_QUERY, {
+    const identifiers = METAFIELD_KEYS.map((key) => ({
+      namespace: CUSTOMIZER_NAMESPACE,
+      key,
+    }));
+
+    const data = await this.query<any>(GET_PRODUCT_QUERY, {
       handle,
-      ns: CUSTOMIZER_NAMESPACE,
-      k1: CUSTOMIZER_KEYS.fontPriceVariable,
-      k2: CUSTOMIZER_KEYS.customImage,
-      k3: CUSTOMIZER_KEYS.customText,
-      k4: CUSTOMIZER_KEYS.customColour,
-      k5: CUSTOMIZER_KEYS.coloursAvailable,
+      identifiers,
     });
+
+    // Map metafields array
+    const product = data?.productByHandle as any;
+    if (product && Array.isArray(product.metafields)) {
+      const byKey = (k: string) =>
+        product.metafields.find((m: any) => m?.key?.toLowerCase() === k.toLowerCase()) || null;
+
+      // Set alias for use using product.alias
+      METAFIELDS.forEach((cfg) => {
+        const mf = byKey(cfg.key);
+        product[cfg.alias] = mf ? { value: mf.value, type: mf.type } : null;
+      });
+    }
+
+    return data;
   }
 }
 
