@@ -31,6 +31,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         ca: metafield(namespace: "custom", key: "colours_available") {
           id namespace key type value
         }
+        cipv: metafield(namespace: "custom", key: "custom_image_price_variable") {
+          id namespace key type value
+        }
+        ctpv: metafield(namespace: "custom", key: "custom_text_price_variable") {
+          id namespace key type value
+        }
+        ccpv: metafield(namespace: "custom", key: "colour_customisation_price_variable") {
+          id namespace key type value
+        }
       }
     }
   `;

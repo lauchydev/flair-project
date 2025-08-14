@@ -7,17 +7,26 @@ function safeParse(txt: string) {
   try { return JSON.parse(txt); } catch { return { parseError: true, body: txt }; }
 }
 
+function formatDecimal(value: any): string {
+  const number = parseFloat(value);
+  if (isNaN(number)) return "0.0";
+  return number.toFixed(2);
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   res.setHeader("Cache-Control", "no-store");
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   if (!ADMIN_TOKEN) return res.status(500).json({ error: "Missing SHOPIFY_ADMIN_TOKEN env var" });
 
-  const { id, customImage, customText, customColours, colours } = req.body as {
+    const { id, customImage, customText, customColours, colours, customImagePrice, customTextPrice, customColoursPrice} = req.body as {
     id?: string;
     customImage?: boolean;
     customText?: boolean;
     customColours?: boolean;
     colours?: string[];
+    customImagePrice?: string;
+    customTextPrice?: string;
+    customColoursPrice?: string;
   };
 
   if (!id) return res.status(400).json({ error: "Missing product id" });
@@ -37,6 +46,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         ct: metafield(namespace: "custom", key: "custom_text") { type }
         cc: metafield(namespace: "custom", key: "color_customisation") { type }
         ca: metafield(namespace: "custom", key: "colours_available") { type }
+        cipv: metafield(namespace: "custom", key: "custom_image_price_variable") { type }
+        ctpv: metafield(namespace: "custom", key: "custom_text_price_variable") { type }
+        ccpv: metafield(namespace: "custom", key: "colour_customisation_price_variable") { type }
       }
     }
   `;
@@ -86,6 +98,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         key: "colours_available",
         type: current.ca?.type || "list.color", 
         value: JSON.stringify(cleanColours),
+      },
+      {
+        ownerId: id,
+        namespace: "custom",
+        key: "custom_image_price_variable",
+        type: current.cipv?.type || "number_decimal",
+        value: formatDecimal(customImagePrice),
+      },
+      {
+        ownerId: id,
+        namespace: "custom",
+        key: "custom_text_price_variable",
+        type: current.ctpv?.type || "number_decimal",
+        value: formatDecimal(customTextPrice),
+      },
+      {
+        ownerId: id,
+        namespace: "custom",
+        key: "colour_customisation_price_variable",
+        type: current.ccpv?.type || "number_decimal",
+        value: formatDecimal(customColoursPrice),
       },
     ];
 
