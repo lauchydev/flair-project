@@ -93,7 +93,7 @@ export default function ProductCard({
           <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-2xl border-2 border-black shadow-lg transform -rotate-1 inline-block">
             <span className="text-xl font-black">
               {hasMultiplePrices ? "FROM " : ""}
-              {price.amount} {price.currencyCode}
+              ${price.amount} {price.currencyCode}
             </span>
           </div>
           {hasMultiplePrices && (
