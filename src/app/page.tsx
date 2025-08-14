@@ -1,6 +1,6 @@
-import Footer from "@/components/layout/Footer";
-import Header from "@/components/layout/Header";
-import Hero from "@/components/layout/Hero";
+import Footer from "@/client/components/layout/Footer";
+import Header from "@/client/components/layout/Header";
+import Hero from "@/client/components/layout/Hero";
 import { Metadata } from "next";
 
 export const metadata: Metadata = {

@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { shopify } from "@/lib/shopify/client";
+import { shopify } from "@/client/lib/shopify/client";
 import {
   ShopifyProduct,
   ShopifyProductsResponse,
   extractNodes,
-} from "@/types/api/shopify";
+} from "@/client/types/api/shopify";
 import ProductCard from "./ProductCard";
 
 interface ProductsGridProps {

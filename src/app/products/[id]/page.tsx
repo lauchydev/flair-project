@@ -1,8 +1,8 @@
-import Header from "@/components/layout/Header";
-import Footer from "@/components/layout/Footer";
-import ProductCustomizer from "@/components/products/customizer/ProductCustomizer";
-import { shopify } from "@/lib/shopify/client";
-import { ShopifyProductResponse } from "@/types/api/shopify";
+import Header from "@/client/components/layout/Header";
+import Footer from "@/client/components/layout/Footer";
+import ProductCustomizer from "@/client/components/products/customizer/ProductCustomizer";
+import { shopify } from "@/client/lib/shopify/client";
+import { ShopifyProductResponse } from "@/client/types/api/shopify";
 
 interface ProductDetailPageProps {
   params: Promise<{ id: string }>;

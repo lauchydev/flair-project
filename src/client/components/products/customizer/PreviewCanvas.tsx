@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import type { ShopifyProduct } from "@/types/api/shopify";
+import type { ShopifyProduct } from "@/client/types/api/shopify";
 import type { ViewPose } from "./types";
 
 interface PreviewCanvasProps {

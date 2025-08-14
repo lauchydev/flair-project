@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ShopifyProduct } from "@/types/api/shopify";
+import { ShopifyProduct } from "@/client/types/api/shopify";
 
 interface ProductCardProps {
   product: ShopifyProduct;

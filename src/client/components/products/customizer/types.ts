@@ -1,4 +1,4 @@
-import type { ShopifyProduct, ShopifyVariant } from "@/types/api/shopify";
+import type { ShopifyProduct, ShopifyVariant } from "@/client/types/api/shopify";
 
 export type ViewPose = "front" | "back" | "left" | "right";
 

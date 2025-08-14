@@ -1,8 +1,8 @@
 import { Metadata } from "next";
-import Header from "@/components/layout/Header";
-import Footer from "@/components/layout/Footer";
-import ProductsHero from "@/components/products/ProductsHero";
-import ProductsSection from "@/components/products/ProductsSection";
+import Header from "@/client/components/layout/Header";
+import Footer from "@/client/components/layout/Footer";
+import ProductsHero from "@/client/components/products/ProductsHero";
+import ProductsSection from "@/client/components/products/ProductsSection";
 
 export const metadata: Metadata = {
   title: "Flair | Products",

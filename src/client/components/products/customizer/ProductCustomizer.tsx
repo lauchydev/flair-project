@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import type { ShopifyProduct, ShopifyVariant } from "@/types/api/shopify";
-import { getAvailableViewsForProduct } from "@/lib/customizer/config";
+import type { ShopifyProduct, ShopifyVariant } from "@/client/types/api/shopify";
+import { getAvailableViewsForProduct } from "@/client/lib/customizer/config";
 
 type ViewPose = "front" | "back" | "left" | "right";
 
@@ -90,25 +90,34 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
   }, [availableViews, selectedView]);
 
   // Feature flags from product metafields
+  const enableCustomColor = parseMetafieldBoolean(product.customColor?.value);
   const enableCustomImage = parseMetafieldBoolean(product.customImage?.value);
   const enableCustomText = parseMetafieldBoolean(product.customText?.value);
-  const enableCustomColour = parseMetafieldBoolean(product.customColour?.value);
   
   // Parse available colors from metafield
   const availableColours = useMemo(() => 
-    parseColorMetafield(product.coloursAvailable?.value),
-    [product.coloursAvailable?.value]
+    parseColorMetafield(product.colorsList?.value),
+    [product.colorsList?.value]
   );
 
   // Price for text
-  const fontPrice = useMemo(
-    () => parsePriceModifier(product.fontPriceVar?.value),
-    [product.fontPriceVar?.value]
+  const textPrice = useMemo(
+    () => parsePriceModifier(product.customTextPrice?.value),
+    [product.customTextPrice?.value]
   );
 
-  // TODO: Adjust with metafield 
-  const imagePrice = 5;
+  // Price for image
+  const imagePrice = useMemo(
+    () => parsePriceModifier(product.customImagePrice?.value),
+    [product.customImagePrice?.value]
+  );
 
+  // Price for product colour
+  const colorPrice = useMemo(
+    () => parsePriceModifier(product.customColorPrice?.value),
+    [product.customColorPrice?.value]
+  );
+  
   // Set initial color if available
   useEffect(() => {
     if (availableColours.length > 0 && !selectedColor) {
@@ -128,28 +137,28 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
     const base = selectedVariant?.price ?? product.priceRange.minVariantPrice;
     const baseAmount = parseFloat(base.amount);
     let extra = 0;
-    
-    // Text pricing from metafield
-    const pricePerChar = parsePriceModifier(product.fontPriceVar?.value);
+
+    // Flat text pricing from metafield
     if (enableCustomText && customText) {
-      extra += pricePerChar
+      extra += textPrice;
     }
-    
-    // Image upload pricing (add metafield price like above)
+
+    // Flat image upload pricing (from variable)
     if (enableCustomImage && uploadedImage) {
-      extra += 5;
+      extra += imagePrice;
     }
-    
+
     const total = Math.max(0, baseAmount + extra);
     return `$${total.toFixed(2)} ${base.currencyCode}`;
   }, [
-    selectedVariant, 
-    product.priceRange.minVariantPrice, 
-    enableCustomText, 
-    customText, 
-    product.fontPriceVar?.value,
+    selectedVariant,
+    product.priceRange.minVariantPrice,
+    enableCustomText,
+    customText,
+    textPrice,
     enableCustomImage,
-    uploadedImage
+    uploadedImage,
+    imagePrice,
   ]);
 
   // Variant selection logic
@@ -261,9 +270,16 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
             )}
 
             {/* Color selection (metafield controlled) */}
-            {enableCustomColour && availableColours.length > 0 && (
+            {enableCustomColor && availableColours.length > 0 && (
               <section className="rounded-3xl border-4 border-black bg-white p-5 shadow-xl">
-                <h2 className="mb-3 text-lg font-black text-black">Color</h2>
+                <h2 className="mb-3 text-lg font-black text-black">Color
+                  {/* If there's a price for selecting a color, display it */}
+                {colorPrice > 0 && (
+                    <span className="ml-2 align-baseline text-xs font-semibold text-gray-500">
+                      +${colorPrice.toFixed(2)}
+                    </span>
+                  )}
+                </h2>
                 <div className="grid grid-cols-8 gap-2">
                   {availableColours.map((color) => (
                     <button
@@ -273,6 +289,8 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                       className={`h-8 w-8 rounded-full border-2 border-black shadow transition-all ${
                         selectedColor === color ? "ring-4 ring-purple-400 scale-110" : "hover:scale-105"
                       }`}
+                      // For time being, setting colour just changes colour of the background in the image preview
+                      // TODO: Fix colour changing logic
                       style={{ backgroundColor: color }}
                     />
                   ))}
@@ -285,13 +303,13 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
               <section className="rounded-3xl border-4 border-black bg-white p-5 shadow-xl">
                 <h2 className="mb-3 text-lg font-black text-black">
                   Add image
-                  {/* TODO: Check if price for image uploading? */}
-                  {(
+                  {/* If there's a price for adding an image, display it */}
+                  {imagePrice > 0 && (
                     <span className="ml-2 align-baseline text-xs font-semibold text-gray-500">
-                      +$4.99
+                      +${imagePrice.toFixed(2)}
                     </span>
                   )}
-                  </h2>
+                </h2>
                 <label className="block cursor-pointer rounded-xl border-2 border-dashed border-black p-4 text-center font-bold text-gray-700 hover:bg-gray-50 transition-colors">
                   <input
                     type="file"
@@ -327,10 +345,10 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
               <section className="rounded-3xl border-4 border-black bg-white p-5 shadow-xl">
                 <h2 className="mb-3 text-lg font-black text-black">
                   Add text
-                  {/* TODO: Either add price for text or price per character added (Discuss in next meeting) */}
-                  {fontPrice > 0 && (
+                  {/* If there's a price for adding text, display it */}
+                  {textPrice > 0 && (
                     <span className="ml-2 align-baseline text-xs font-semibold text-gray-500">
-                      +${fontPrice.toFixed(2)}
+                      +${textPrice.toFixed(2)}
                     </span>
                   )}
                 </h2>
@@ -374,7 +392,7 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                       quantity,
                       selectedVariantId,
                       selectedColor,
-                      selectedView,
+                      selectedView, // DEBUGGING
                       uploadedImage,
                       customText,
                       // Preparation for cart (line attributes in shopify)
@@ -382,7 +400,7 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                         custom_text: customText,
                         custom_color: selectedColor,
                         custom_image: uploadedImage,
-                        selected_view: selectedView,
+                        selected_view: selectedView, // DEBUGGING
                       }
                     });
                   }}
@@ -401,10 +419,22 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
             </section>
           </aside>
 
+
+
+
+
+
+
+
+
+
+
           {/* Preview Panel */}
           <section className="lg:col-span-8">
             <div className="rounded-3xl border-4 border-black bg-white p-4 shadow-xl">
               {/* View switcher */}
+              {/* TODO: Fix view changer, each view should display a different image of the product, 
+              should carry over colour and changes on each view (images, text and placement) should be saved on each view */}
               <div className="mb-3 flex gap-2 justify-center">
                 {availableViews.map((pose) => (
                   <button
@@ -424,6 +454,7 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
               {/* Canvas area */}
               <div className="relative h-[50vh] lg:h-[70vh] w-full overflow-hidden rounded-2xl border-2 border-black bg-gradient-to-br from-gray-50 to-gray-100">
                 {/* Base product image */}
+                {/* TODO: Should change with the view switcher */}
                 {product.featuredImage && (
                   <Image
                     src={product.featuredImage.url}
@@ -435,6 +466,7 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                 )}
 
                 {/* Color overlay */}
+                {/* TODO: Remove 'overlay' and add actual product color changes */}
                 {selectedColor && (
                   <div
                     className="absolute inset-0 mix-blend-multiply opacity-60"
@@ -443,6 +475,7 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                 )}
 
                 {/* Text overlay */}
+                {/* TODO: Actually render the text ontop of the product, able to be saved and written to the product for when ordering through shopify */}
                 {customText && (
                   <div className="absolute bottom-6 left-1/2 -translate-x-1/2 rounded-xl border-2 border-black bg-white/70 px-3 py-1 text-sm font-black text-black shadow">
                     {customText}
@@ -450,6 +483,7 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                 )}
 
                 {/* Image overlay */}
+                {/* TODO: Same as above for text */}
                 {uploadedImage && (
                   <img
                     src={uploadedImage}
