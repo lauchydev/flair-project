@@ -36,4 +36,4 @@ body {
 }
 
 /* Import performance optimizations */
-@import "../styles/performance.css";
+@import "../client/styles/performance.css";
