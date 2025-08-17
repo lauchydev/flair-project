@@ -16,7 +16,7 @@ type Product = {
   description?: string | null;
   descriptionHtml?: string | null;
   images?: { edges: { node: { url?: string | null; src?: string | null; altText?: string | null } }[] };
-  variants?: { edges: { node: { id: string; title: string; price: string } }[] };
+  variants?: { edges: { node: { id: string; title: string; price: string; inventoryItem?: { measurement?: { weight?: { value?: number | null; unit?: string | null; }; }; }; } }[] };
   ci?: { id?: string | null; type: string; value: string | null }; // custom.custom_image
   ct?: { id?: string | null; type: string; value: string | null }; // custom.custom_text
   cc?: { id?: string | null; type: string; value: string | null }; // custom.color_customisation
@@ -181,6 +181,16 @@ export default function ProductDetailsPage() {
   if (loading) return <p className="p-6">Loading...</p>;
   if (!product) return <p className="p-6">Product not found</p>;
 
+  const firstVariant = product.variants?.edges?.[0]?.node;
+
+  const weightValue = firstVariant?.inventoryItem?.measurement?.weight?.value;
+  const weightUnit = firstVariant?.inventoryItem?.measurement?.weight?.unit;
+
+  const weightDisplay =
+    weightValue != null && weightUnit
+      ? `${weightValue} ${weightUnit.toLowerCase()}`
+      : "No weight info";
+
   const imageUrl =
     product.images?.edges?.[0]?.node?.url ||
     product.images?.edges?.[0]?.node?.src ||
@@ -271,7 +281,7 @@ export default function ProductDetailsPage() {
                 )}
                 {/* Custom Image Price Variable (only if Custom Image = yes) (TO ADD) */}
               </label>
-
+              <p className="text-sm text-gray-500">Weight: {weightDisplay}</p>
               <label className="inline-flex items-center gap-2">
                 <span>Custom Text</span>
                 <input
