@@ -58,6 +58,12 @@ export interface ShopifyProduct extends ShopifyMetafieldsShape {
       node: ShopifyVariant;
     }>;
   };
+  metafields?: Array<{
+    namespace: string;
+    key: string;
+    value: string;
+    type: string;
+  }>;
 }
 
 export interface ShopifyProductsResponse {
