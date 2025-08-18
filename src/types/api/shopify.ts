@@ -2,6 +2,8 @@
  * TypeScript types for Shopify Storefront API responses
  */
 
+import type { MetafieldAlias } from "@/lib/shopify/metafields";
+
 export interface ShopifyImage {
   url: string;
   altText: string | null;
@@ -33,7 +35,7 @@ export interface ShopifyVariant {
   selectedOptions: ShopifyVariantOption[];
 }
 
-export interface ShopifyProduct {
+export interface ShopifyProduct extends ShopifyMetafieldsShape {
   id: string;
   title: string;
   handle: string;
@@ -56,12 +58,6 @@ export interface ShopifyProduct {
       node: ShopifyVariant;
     }>;
   };
-  // Product Metafields from shopify
-  fontPriceVar?: { value: string; type: string } | null;
-  customImage?: { value: string; type: string } | null;
-  customText?: { value: string; type: string } | null;
-  customColour?: { value: string; type: string } | null;
-  coloursAvailable?: { value: string; type: string } | null;
 }
 
 export interface ShopifyProductsResponse {
@@ -75,6 +71,13 @@ export interface ShopifyProductsResponse {
 export interface ShopifyProductResponse {
   productByHandle: ShopifyProduct | null;
 }
+
+/**
+ *  Get Metfields from {@link MetafieldAlias }
+ */
+export type ShopifyMetafieldsShape = {
+  [K in MetafieldAlias]?: { value: string; type: string } | null;
+};
 
 // Utility types for working with edges pattern
 export type ShopifyEdge<T> = {
