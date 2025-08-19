@@ -30,10 +30,11 @@ export function createColorImageMap(
         back: images[backImage].url,
       });
     } else if (images[frontImage]) {
+      // Fall back for no back image set
       map.push({
         color: color,
         front: images[frontImage].url,
-        back: images[backImage].url,
+        back: images[frontImage].url,
       });
     }
   });
