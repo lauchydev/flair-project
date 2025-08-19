@@ -4,9 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import type { ShopifyProduct, ShopifyVariant } from "@/types/api/shopify";
 import { getAvailableViewsForProduct } from "@/lib/customizer/config";
+import { getColorImageMap } from "@/lib/customizer/assets";
 
-type ViewPose = "front" | "back" | "left" | "right";
-
+type ViewPose = "front" | "back";
 interface ProductCustomizerProps {
   product: ShopifyProduct;
 }
@@ -68,28 +68,28 @@ function parsePriceModifier(value: string | null | undefined): number {
 }
 
 export default function ProductCustomizer({ product }: ProductCustomizerProps) {
+  const [selectedColor, setSelectedColor] = useState<string | null>(null);
+  const [quantity, setQuantity] = useState<number>(1);
+  const [selectedView, setSelectedView] = useState<ViewPose>("front");
+
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(
     product.variants.edges[0]?.node.id ?? null
   );
-  const [selectedColor, setSelectedColor] = useState<string | null>(null);
-  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
-  const [customText, setCustomText] = useState<string>("");
-  const [quantity, setQuantity] = useState<number>(1);
+
+  const [viewCustomizations, setViewCustomizations] = useState<{
+    front: { text: string; uploadedImage: string | null };
+    back: { text: string; uploadedImage: string | null };
+  }>({
+    front: { text: "", uploadedImage: null },
+    back: { text: "", uploadedImage: null },
+  });
+
   const variantEdges = product.variants.edges;
+  const availableViews: ViewPose[] = ["front", "back"];
 
-  // Get available views for this product
-  const availableViews = useMemo(
-    () => getAvailableViewsForProduct(product),
-    [product]
-  );
-  const [selectedView, setSelectedView] = useState<ViewPose>(availableViews[0]);
-
-  // Ensure selected view is valid when product changes
-  useEffect(() => {
-    if (!availableViews.includes(selectedView)) {
-      setSelectedView(availableViews[0]);
-    }
-  }, [availableViews, selectedView]);
+  const currentViewCustomizatoin = viewCustomizations[selectedView];
+  const uploadedImage = currentViewCustomizatoin.uploadedImage;
+  const customText = currentViewCustomizatoin.text;
 
   // Feature flags from product metafields
   const enableCustomColor = parseMetafieldBoolean(product.customColor?.value);
@@ -343,7 +343,13 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                       const file = e.target.files?.[0];
                       if (!file) return;
                       const url = URL.createObjectURL(file);
-                      setUploadedImage(url);
+                      setViewCustomizations((prev) => ({
+                        ...prev,
+                        [selectedView]: {
+                          ...prev[selectedView],
+                          uploadedImage: url,
+                        },
+                      }));
                     }}
                   />
                   {uploadedImage ? "Change image" : "Click to upload"}
@@ -351,14 +357,22 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                 {uploadedImage && (
                   <div className="mt-3 relative">
                     <div className="relative h-24 w-full overflow-hidden rounded-xl border-2 border-black">
-                      <Image
+                      <img
                         src={uploadedImage}
                         alt="Uploaded"
                         className="h-full w-full object-cover"
                       />
                     </div>
                     <button
-                      onClick={() => setUploadedImage(null)}
+                      onClick={() =>
+                        setViewCustomizations((prev) => ({
+                          ...prev,
+                          [selectedView]: {
+                            ...prev[selectedView],
+                            uploadedImage: null,
+                          },
+                        }))
+                      }
                       className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold hover:bg-red-600"
                     >
                       ×
@@ -382,7 +396,15 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                 </h2>
                 <input
                   value={customText}
-                  onChange={(e) => setCustomText(e.target.value)}
+                  onChange={(e) =>
+                    setViewCustomizations((prev) => ({
+                      ...prev,
+                      [selectedView]: {
+                        ...prev[selectedView],
+                        text: e.target.value,
+                      },
+                    }))
+                  }
                   placeholder="Type your text"
                   className="w-full rounded-xl border-2 border-black px-3 py-2 font-semibold text-black placeholder-gray-400 focus:outline-none focus:border-purple-500"
                 />
@@ -427,9 +449,13 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                       customText,
                       // Preparation for cart (line attributes in shopify)
                       metafields: {
-                        custom_text: customText,
+                        custom_text_front: viewCustomizations.front.text,
+                        custom_text_back: viewCustomizations.back.text,
                         custom_color: selectedColor,
-                        custom_image: uploadedImage,
+                        custom_image_front:
+                          viewCustomizations.front.uploadedImage,
+                        custom_image_back:
+                          viewCustomizations.back.uploadedImage,
                         selected_view: selectedView, // DEBUGGING
                       },
                     });
@@ -476,25 +502,23 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
               {/* Canvas area */}
               <div className="relative h-[50vh] lg:h-[70vh] w-full overflow-hidden rounded-2xl border-2 border-black bg-gradient-to-br from-gray-50 to-gray-100">
                 {/* Base product image */}
-                {/* TODO: Should change with the view switcher */}
-                {product.featuredImage && (
-                  <Image
-                    src={product.featuredImage.url}
-                    alt={product.featuredImage.altText || product.title}
-                    fill
-                    className="object-contain"
-                    sizes="(max-width: 1024px) 100vw, 66vw"
-                  />
-                )}
-
-                {/* Color overlay */}
-                {/* TODO: Remove 'overlay' and add actual product color changes */}
-                {selectedColor && (
-                  <div
-                    className="absolute inset-0 mix-blend-multiply opacity-60"
-                    style={{ backgroundColor: selectedColor }}
-                  />
-                )}
+                {(() => {
+                  const imageData = getColorImageMap(
+                    product,
+                    availableColours,
+                    selectedColor,
+                    selectedView
+                  );
+                  return (
+                    <Image
+                      src={imageData.url}
+                      alt={imageData.altText}
+                      fill
+                      className="object-contain"
+                      sizes="(max-width: 1024px) 100vw, 66vw"
+                    />
+                  );
+                })()}
 
                 {/* Text overlay */}
                 {/* TODO: Actually render the text ontop of the product, able to be saved and written to the product for when ordering through shopify */}
@@ -507,7 +531,7 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                 {/* Image overlay */}
                 {/* TODO: Same as above for text */}
                 {uploadedImage && (
-                  <Image
+                  <img
                     src={uploadedImage}
                     alt="Custom overlay"
                     className="absolute right-6 top-6 h-24 w-24 rounded-lg border-2 border-black object-cover shadow"
