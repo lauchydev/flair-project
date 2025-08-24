@@ -1,45 +1,72 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeftIcon,
   PencilSquareIcon,
   PlusIcon,
-  EyeDropperIcon,
+  EyeDropperIcon, // NOTE: correct spelling from heroicons
+  CheckIcon,
+  XMarkIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  TrashIcon,
 } from "@heroicons/react/24/outline";
+
+type ImageNode = {
+  id?: string | null;
+  url?: string | null;
+  src?: string | null;
+  altText?: string | null;
+};
 
 type Product = {
   id: string;
   title: string;
   description?: string | null;
   descriptionHtml?: string | null;
-  images?: { edges: { node: { url?: string | null; src?: string | null; altText?: string | null } }[] };
+  images?: { edges: { node: ImageNode }[] };
   variants?: { edges: { node: { id: string; title: string; price: string } }[] };
-  ci?: { id?: string | null; type: string; value: string | null }; // custom.custom_image
-  ct?: { id?: string | null; type: string; value: string | null }; // custom.custom_text
-  cc?: { id?: string | null; type: string; value: string | null }; // custom.color_customisation
-  ca?: { id?: string | null; type: string; value: string | null }; // custom.colours_available
+  // metafields
+  ci?: { type: string; value: string | null }; // custom.custom_image
+  ct?: { type: string; value: string | null }; // custom.custom_text
+  cc?: { type: string; value: string | null }; // custom.color_customisation
+  ca?: { type: string; value: string | null }; // custom.colours_available
 };
 
 export default function ProductDetailsPage() {
   const params = useParams() as { id: string };
-  const productId = decodeURIComponent(params.id); 
-
+  const productId = decodeURIComponent(params.id);
 
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Description editing
-  const [isEditingDesc, setIsEditingDesc] = useState(false);
+  // Inline edit states
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [editingDesc, setEditingDesc] = useState(false);
+  const [draftTitle, setDraftTitle] = useState("");
   const [draftDesc, setDraftDesc] = useState("");
 
-  // Metafield editor state
+  // Metafields UI
   const [customImage, setCustomImage] = useState(false);
   const [customText, setCustomText] = useState(false);
   const [customColours, setCustomColours] = useState(false);
-  const [colours, setColours] = useState<string[]>([]); // hex codes
+  const [colours, setColours] = useState<string[]>([]); // #RRGGBB
+
+  // Carousel state
+  const [activeIdx, setActiveIdx] = useState(0);
+
+  // Local upload
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const descTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const images = product?.images?.edges ?? [];
+  const activeImage = images[activeIdx]?.node;
 
   const currentDesc = useMemo(() => {
     if (!product) return "";
@@ -47,101 +74,96 @@ export default function ProductDetailsPage() {
     return product.description || "";
   }, [product]);
 
-  // Load product
+  async function loadProduct() {
+    const res = await fetch(`/api/get-product?id=${encodeURIComponent(productId)}`, { cache: "no-store" });
+    const data = (await res.json()) as Product | null;
+    setProduct(data);
+
+    if (data) {
+      setDraftTitle(data.title);
+      setDraftDesc(data.descriptionHtml || data.description || "");
+      setCustomImage((data.ci?.value || "") === "true");
+      setCustomText((data.ct?.value || "") === "true");
+      setCustomColours((data.cc?.value || "") === "true");
+      try {
+        const arr = data.ca?.value ? JSON.parse(data.ca.value) : [];
+        setColours(Array.isArray(arr) ? arr : []);
+      } catch {
+        setColours([]);
+      }
+    }
+  }
+
   useEffect(() => {
     if (!productId) return;
     (async () => {
       try {
-        const res = await fetch(`/api/get-product?id=${encodeURIComponent(productId)}`, { cache: "no-store" });
-        const data = (await res.json()) as Product | null;
-        setProduct(data);
-
-        // Init metafields UI state
-        if (data) {
-          setCustomImage((data.ci?.value || "") === "true");
-          setCustomText((data.ct?.value || "") === "true");
-          setCustomColours((data.cc?.value || "") === "true");
-          try {
-            const arr = data.ca?.value ? JSON.parse(data.ca.value) : [];
-            setColours(Array.isArray(arr) ? arr : []);
-          } catch {
-            setColours([]);
-          }
-        }
-      } catch (e) {
-        console.error("Failed to fetch product", e);
+        await loadProduct();
+      } catch {
+        alert("Failed to load product");
       } finally {
         setLoading(false);
       }
     })();
   }, [productId]);
 
-  useEffect(() => {
-    if (isEditingDesc) setDraftDesc(currentDesc);
-  }, [isEditingDesc, currentDesc]);
+  // Auto-focus when entering edit
+  useEffect(() => { if (editingTitle) titleInputRef.current?.focus(); }, [editingTitle]);
+  useEffect(() => { if (editingDesc)  descTextareaRef.current?.focus(); }, [editingDesc]);
 
-  // Save description 
-  async function handleSaveDescription() {
+  // --- Save title/description
+  async function saveTitle() {
     if (!product) return;
     try {
       const res = await fetch("/api/update-product", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: product.id, description: draftDesc }),
+        body: JSON.stringify({ id: productId, title: draftTitle }),
       });
       const text = await res.text();
       let json: any; try { json = JSON.parse(text); } catch { json = { parseError: true, body: text }; }
-      if (!res.ok) {
-        const msg = json?.userErrors?.[0]?.message || json?.error || "Failed to update product";
-        alert(msg);
-        return;
-      }
+      if (!res.ok) return alert(json?.error || "Failed to update title");
       setProduct(json as Product);
-      setIsEditingDesc(false);
-    } catch (e: any) {
-      console.error(e);
-      alert(`Network error: ${e?.message || e}`);
-    }
+      setEditingTitle(false);
+    } catch (e: any) { alert(`Network error: ${e?.message || e}`); }
   }
 
-  // Save metafields to Shopify
+  async function saveDescription() {
+    if (!product) return;
+    try {
+      const res = await fetch("/api/update-product", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: productId, descriptionHtml: draftDesc }),
+      });
+      const text = await res.text();
+      let json: any; try { json = JSON.parse(text); } catch { json = { parseError: true, body: text }; }
+      if (!res.ok) return alert(json?.error || "Failed to update description");
+      setProduct(json as Product);
+      setEditingDesc(false);
+    } catch (e: any) { alert(`Network error: ${e?.message || e}`); }
+  }
+
+  // --- Save metafields
   async function handleSaveMetafields() {
     if (!product) return;
     try {
       const res = await fetch("/api/update-metafields", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: productId, 
-          customImage,
-          customText,
-          customColours,
-          colours,
-        }),
+        body: JSON.stringify({ id: productId, customImage, customText, customColours, colours }),
       });
       const text = await res.text();
       let json: any; try { json = JSON.parse(text); } catch { json = { parseError: true, body: text }; }
-
       if (!res.ok) {
-        console.error("Save metafields failed:", json);
-        const msg =
-          json?.error ||
-          json?.userErrors?.[0]?.message ||
-          json?.raw?.errors?.[0]?.message ||
-          json?.rawText ||
-          "Unknown error";
-        alert(`Save failed:\n${msg}`);
-        return;
+        const msg = json?.error || json?.userErrors?.[0]?.message || json?.raw?.errors?.[0]?.message || json?.rawText || "Unknown error";
+        return alert(`Save failed:\n${msg}`);
       }
+      alert("Options saved!");
+    } catch (e: any) { alert(`Network error: ${e?.message || e}`); }
+  }
 
-        alert("Options saved!");
-      } catch (e: any) {
-        console.error("Network error:", e);
-        alert(`Network error: ${e?.message || e}`);
-      }
-    }
-
-  // Eyedropper 
+  // Eyedropper + fallback
   async function pickColour() {
     // @ts-ignore
     if (window.EyeDropper) {
@@ -159,132 +181,331 @@ export default function ProductDetailsPage() {
       input.style.left = "-9999px";
       document.body.appendChild(input);
       input.click();
-      input.oninput = () => {
-        if (input.value) setColours((prev) => Array.from(new Set([...prev, input.value])));
-      };
+      input.oninput = () => { if (input.value) setColours((prev) => Array.from(new Set([...prev, input.value]))); };
       input.onblur = () => input.remove();
     }
   }
 
+  // --- Carousel controls
+  function nextImage() {
+    if (!images.length) return;
+    setActiveIdx((i) => (i + 1) % images.length);
+  }
+  function prevImage() {
+    if (!images.length) return;
+    setActiveIdx((i) => (i - 1 + images.length) % images.length);
+  }
+
+  // --- Local file upload
+  function openFilePicker() { fileInputRef.current?.click(); }
+  function onFilesChosen(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    if (!files.length) return;
+    setPendingFiles((prev) => [...prev, ...files]);
+  }
+  async function uploadPendingFiles() {
+    if (!pendingFiles.length) return;
+    try {
+      const fd = new FormData();
+      fd.append("productId", productId);
+      pendingFiles.forEach((f) => fd.append("files", f));
+      const res = await fetch("/api/upload-product-images", { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) return alert(data?.error || "Upload failed");
+      await loadProduct();
+      setPendingFiles([]);
+      setActiveIdx((product?.images?.edges?.length ?? 1) - 1);
+    } catch (e: any) {
+      alert(`Network error: ${e?.message || e}`);
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  // --- Delete current image 
+  async function deleteCurrentImage() {
+    const node = activeImage;
+    const id = node?.id;
+
+    if (!id) {
+      alert("This image has no id. Ensure your product query returns image { id }.");
+      return;
+    }
+    if (!confirm("Remove this image from the product?")) return;
+    const apiPath = "/api/delete-product-image";
+
+    try {
+      console.log("[deleteCurrentImage] sending", { apiPath, imageId: id });
+
+      const res = await fetch(apiPath, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageId: id }),
+      });
+
+      const status = res.status;
+      const statusText = res.statusText;
+      const bodyText = await res.text();
+
+      // Try to parse JSON but keep raw text if not JSON
+      let payload: any;
+      try {
+        payload = JSON.parse(bodyText);
+      } catch {
+        payload = { nonJson: true, body: bodyText };
+      }
+
+      console.log("[deleteCurrentImage] response", { status, statusText, payload });
+
+      if (!res.ok) {
+        const msg =
+          payload?.error ||
+          payload?.raw?.errors?.[0]?.message ||
+          payload?.r1?.json?.errors?.[0]?.message ||
+          payload?.r2?.json?.errors?.[0]?.message ||
+          payload?.raw?.data?.productDeleteMedia?.userErrors?.[0]?.message ||
+          payload?.raw?.data?.productImageDelete?.userErrors?.[0]?.message ||
+          payload?.body ||
+          `HTTP ${status} ${statusText}`;
+
+        console.error("Delete failed payload:", payload);
+        alert(`Failed to delete image\n\nID: ${id}\n${msg}`);
+        return;
+      }
+
+      // Success — refresh
+      await loadProduct?.();
+      // setActiveIdx?.(0);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[deleteCurrentImage] network error", message);
+      alert(`Network error: ${message}`);
+    }
+  }
+
+
+
+
   if (loading) return <p className="p-6">Loading...</p>;
   if (!product) return <p className="p-6">Product not found</p>;
 
-  const imageUrl =
-    product.images?.edges?.[0]?.node?.url ||
-    product.images?.edges?.[0]?.node?.src ||
-    null;
-  const imageAlt = product.images?.edges?.[0]?.node?.altText || product.title;
+  const primaryUrl = activeImage?.url || activeImage?.src || null;
+  const primaryAlt = activeImage?.altText || product.title;
 
   return (
     <div className="p-6">
-      {/* Top bar */}
-      <div className="mb-6 flex items-center justify-between">
+      {/* Back */}
+      <div className="mb-6">
         <Link href="/adminpanel" className="inline-flex items-center gap-2 text-gray-600 hover:text-black">
           <ArrowLeftIcon className="w-5 h-5" />
           Back to Products
         </Link>
-
-        {!isEditingDesc ? (
-          <button onClick={() => setIsEditingDesc(true)} className="inline-flex items-center gap-2 bg-black text-white px-4 py-2 rounded">
-            <PencilSquareIcon className="w-5 h-5" />
-            Edit Description
-          </button>
-        ) : (
-          <div className="flex gap-2">
-            <button onClick={handleSaveDescription} className="bg-black text-white px-4 py-2 rounded">Save</button>
-            <button onClick={() => { setIsEditingDesc(false); setDraftDesc(currentDesc); }} className="px-4 py-2 rounded border">Cancel</button>
-          </div>
-        )}
       </div>
 
       {/* Two-column layout */}
       <div className="flex flex-col md:flex-row gap-8">
-        {/* Left: image */}
-        <div className="flex-shrink-0">
-          {imageUrl ? (
-            <img src={imageUrl} alt={imageAlt} className="w-full md:w-[420px] h-auto object-cover rounded-lg shadow" />
-          ) : (
-            <div className="w-full md:w-[420px] h-[420px] bg-gray-200 rounded-lg flex items-center justify-center text-gray-500">
-              No Image Available
-            </div>
-          )}
+        {/* LEFT: Image carousel + uploader */}
+        <div className="flex-shrink-0 w-full md:w-[520px]">
+          <div className="relative w-full aspect-[4/3] bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center">
+            {images.length ? (
+              <>
+                <img src={primaryUrl || ""} alt={primaryAlt} className="w-full h-full object-contain" />
+
+                {images.length > 1 && (
+                  <>
+                    <button
+                      onClick={prevImage}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/80 hover:bg-white shadow"
+                      title="Previous"
+                      type="button"
+                    >
+                      <ChevronLeftIcon className="w-6 h-6" />
+                    </button>
+                    <button
+                      onClick={nextImage}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/80 hover:bg-white shadow"
+                      title="Next"
+                      type="button"
+                    >
+                      <ChevronRightIcon className="w-6 h-6" />
+                    </button>
+                  </>
+                )}
+
+                <button
+                  onClick={deleteCurrentImage}
+                  className="absolute top-2 right-2 p-2 rounded bg-white/90 hover:bg-white shadow"
+                  title="Delete image"
+                  type="button"
+                >
+                  <TrashIcon className="w-5 h-5 text-red-600" />
+                </button>
+              </>
+            ) : (
+              <div className="text-gray-500">No images</div>
+            )}
+          </div>
+
+          {/* Thumbnails */}
+          <div className="mt-3 flex gap-2 overflow-x-auto">
+            {images.map((edge, idx) => {
+              const node = edge.node;
+              const thumb = node.url || node.src || "";
+              return (
+                <button
+                  key={node.id || thumb || idx}
+                  onClick={() => setActiveIdx(idx)}
+                  className={`border rounded overflow-hidden w-20 h-20 flex-shrink-0 ${idx === activeIdx ? "ring-2 ring-black" : ""}`}
+                  title={`Image ${idx + 1}`}
+                  type="button"
+                >
+                  {thumb ? (
+                    <img src={thumb} alt={`Thumb ${idx + 1}`} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-gray-200" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Add images (local) */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={onFilesChosen}
+          />
+          <div className="mt-3 flex items-center gap-3">
+            <button
+              onClick={openFilePicker}
+              className="inline-flex items-center gap-2 bg-black text-white px-4 py-2 rounded"
+              type="button"
+            >
+              <PlusIcon className="w-5 h-5" />
+              Add Images
+            </button>
+
+            {pendingFiles.length > 0 && (
+              <>
+                <span className="text-sm text-gray-600">
+                  {pendingFiles.length} file{pendingFiles.length > 1 ? "s" : ""} selected
+                </span>
+                <button
+                  onClick={uploadPendingFiles}
+                  className="inline-flex items-center gap-2 border px-3 py-2 rounded"
+                  type="button"
+                >
+                  Upload
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
-        {/* Right: details + options */}
+        {/* RIGHT: details + editors */}
         <div className="flex-1">
-          <h1 className="text-3xl font-bold mb-4">{product.title}</h1>
-
-          {/* Description */}
-          {!isEditingDesc ? (
-            <div className="prose max-w-none mb-8">
-              {currentDesc ? <div dangerouslySetInnerHTML={{ __html: currentDesc }} /> : <p className="text-gray-700">No description</p>}
+          {/* Title with pencil */}
+          {!editingTitle ? (
+            <div className="flex items-center gap-2 mb-2">
+              <h1 className="text-3xl font-bold">{product.title}</h1>
+              <button
+                onClick={() => { setDraftTitle(product.title); setEditingTitle(true); }}
+                className="p-1 rounded hover:bg-gray-100"
+                title="Edit title"
+                type="button"
+              >
+                <PencilSquareIcon className="w-5 h-5 text-gray-700" />
+              </button>
             </div>
           ) : (
-            <div className="space-y-3 mb-8">
-              <label className="block text-sm font-medium">Description (HTML allowed)</label>
-              <textarea
-                className="w-full min-h-[180px] p-3 border rounded"
-                value={draftDesc}
-                onChange={(e) => setDraftDesc(e.target.value)}
-                placeholder="Enter product description"
+            <div className="flex items-center gap-2 mb-2">
+              <input
+                ref={titleInputRef}
+                value={draftTitle}
+                onChange={(e) => setDraftTitle(e.target.value)}
+                className="border rounded px-3 py-2 text-xl font-semibold flex-1"
               />
+              <button onClick={saveTitle} className="p-2 rounded bg-black text-white" title="Save">
+                <CheckIcon className="w-5 h-5" />
+              </button>
+              <button onClick={() => { setEditingTitle(false); setDraftTitle(product.title); }} className="p-2 rounded border" title="Cancel">
+                <XMarkIcon className="w-5 h-5" />
+              </button>
             </div>
           )}
 
-          {/* Customisation Options */}
-          <div className="p-4 border rounded">
-            <h2 className="text-xl font-semibold mb-4">Customisation Options</h2>
+          {/* Description with pencil */}
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-2">
+              <h2 className="text-lg font-semibold">Description</h2>
+              {!editingDesc && (
+                <button
+                  onClick={() => { setDraftDesc(currentDesc); setEditingDesc(true); }}
+                  className="p-1 rounded hover:bg-gray-100"
+                  title="Edit description"
+                  type="button"
+                >
+                  <PencilSquareIcon className="w-5 h-5 text-gray-700" />
+                </button>
+              )}
+            </div>
 
-            {/* Three options — each on its own line; checkbox inline with text */}
+            {!editingDesc ? (
+              <div className="prose max-w-none">
+                {currentDesc ? <div dangerouslySetInnerHTML={{ __html: currentDesc }} /> : <p className="text-gray-700">No description</p>}
+              </div>
+            ) : (
+              <div className="flex items-start gap-2">
+                <textarea
+                  ref={descTextareaRef}
+                  className="w-full min-h-[180px] p-3 border rounded"
+                  value={draftDesc}
+                  onChange={(e) => setDraftDesc(e.target.value)}
+                  placeholder="Enter product description (HTML allowed)"
+                />
+                <div className="flex flex-col gap-2">
+                  <button onClick={saveDescription} className="p-2 rounded bg-black text-white" title="Save">
+                    <CheckIcon className="w-5 h-5" />
+                  </button>
+                  <button onClick={() => { setEditingDesc(false); setDraftDesc(currentDesc); }} className="p-2 rounded border" title="Cancel">
+                    <XMarkIcon className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Customisation Options (metafields) */}
+          <div className="p-4 border rounded">
+            <h3 className="text-xl font-semibold mb-4">Customisation Options</h3>
+
             <div className="flex flex-col gap-2 mb-4">
               <label className="inline-flex items-center gap-2">
                 <span>Custom Image</span>
-                <input
-                  type="checkbox"
-                  className="w-5 h-5"
-                  checked={customImage}
-                  onChange={(e) => setCustomImage(e.target.checked)}
-                />
+                <input type="checkbox" className="w-5 h-5" checked={customImage} onChange={(e) => setCustomImage(e.target.checked)} />
               </label>
 
               <label className="inline-flex items-center gap-2">
                 <span>Custom Text</span>
-                <input
-                  type="checkbox"
-                  className="w-5 h-5"
-                  checked={customText}
-                  onChange={(e) => setCustomText(e.target.checked)}
-                />
+                <input type="checkbox" className="w-5 h-5" checked={customText} onChange={(e) => setCustomText(e.target.checked)} />
               </label>
 
               <label className="inline-flex items-center gap-2">
                 <span>Custom Colour</span>
-                <input
-                  type="checkbox"
-                  className="w-5 h-5"
-                  checked={customColours}
-                  onChange={(e) => setCustomColours(e.target.checked)}
-                />
+                <input type="checkbox" className="w-5 h-5" checked={customColours} onChange={(e) => setCustomColours(e.target.checked)} />
               </label>
             </div>
 
-            {/* Colours Available (only if Custom Colour = yes) */}
             {customColours && (
               <div className="mb-3">
                 <div className="inline-flex items-center gap-2 mb-2">
                   <span className="font-medium">Colours Available</span>
-
-                  {/* Eyedropper */}
-                  <button
-                    onClick={pickColour}
-                    className="p-1 rounded hover:bg-gray-100"
-                    title="Pick colour"
-                    type="button"
-                  >
+                  <button onClick={pickColour} className="p-1 rounded hover:bg-gray-100" title="Pick colour" type="button">
                     <EyeDropperIcon className="w-5 h-5 text-gray-700" />
                   </button>
-
-                  {/* Plus */}
                   <button
                     onClick={() => setColours((prev) => [...prev, "#000000"])}
                     className="p-1 rounded hover:bg-gray-100"
@@ -295,7 +516,6 @@ export default function ProductDetailsPage() {
                   </button>
                 </div>
 
-                {/* Swatches (click a swatch to remove) + editable hex text */}
                 {colours.length === 0 ? (
                   <p className="text-sm text-gray-500">No colours yet.</p>
                 ) : (
@@ -334,7 +554,7 @@ export default function ProductDetailsPage() {
           {/* Variants (optional) */}
           {product.variants?.edges?.length ? (
             <div className="mt-8">
-              <h2 className="text-xl font-semibold mb-2">Variants</h2>
+              <h3 className="text-xl font-semibold mb-2">Variants</h3>
               <ul className="space-y-1">
                 {product.variants.edges.map(({ node }) => (
                   <li key={node.id} className="text-sm text-gray-600">
