@@ -2,9 +2,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ShoppingCartIcon, UserIcon } from "@heroicons/react/24/outline";
+import LogoutButton from "@/components/layout/LogoutButton"; // <-- add this
 
 export default function Header() {
   const pathname = usePathname();
+  const onAdmin = pathname?.startsWith("/adminpanel");
 
   return (
     <header className="bg-white shadow-sm">
@@ -41,16 +43,20 @@ export default function Header() {
           </nav>
 
           {/* Auth Buttons */}
-          <div className="flex gap-4">
-            {/* Shopping Cart */}
-            <Link href="/cart">
+          <div className="flex gap-4 items-center">
+            <Link href="/cart" aria-label="Cart">
               <ShoppingCartIcon className="w-6 h-6 text-black" />
             </Link>
 
-            {/* User Icon */}
-          <Link href="/login">
-            <UserIcon className="w-6 h-6 text-black hover:text-gray-700" />
-          </Link>
+            {onAdmin ? (
+              // When on admin pages, show Logout
+              <LogoutButton />
+            ) : (
+              // Else, show Login
+              <Link href="/login" aria-label="Login">
+                <UserIcon className="w-6 h-6 text-black hover:text-gray-700" />
+              </Link>
+            )}
           </div>
         </div>
       </div>
