@@ -15,7 +15,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         title
         description
         descriptionHtml
-        images(first: 5) { edges { node { url src altText } } }
+        images(first: 20) { edges { node { id url src altText } } }
         variants(first: 10) { edges { node { id title price } } }
 
         # Your metafields (namespace: custom)
