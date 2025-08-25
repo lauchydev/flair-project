@@ -24,6 +24,28 @@ export default function AdminPanelPage() {
     }
     loadProducts();
   }, []);
+// in src/app/adminpanel/page.tsx
+async function handleDelete(id: string) {
+    if (!confirm("Are you sure you want to delete this product?")) return;
+
+    try {
+      const res = await fetch("/api/delete-product", {
+        method: "POST",                       // use POST (more reliable than DELETE with body)
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.message || `Delete failed (${res.status})`);
+      }
+
+      setProducts(prev => prev.filter(p => p.id !== id));
+    } catch (e: any) {
+      alert(e.message || "Could not delete product");
+      console.error(e);
+    }
+  }
 
   return (
     <div className="p-6">
@@ -79,14 +101,15 @@ export default function AdminPanelPage() {
 
                 {/* Right side: trash bin (no functionality yet) */}
                 <button
-                  className="p-2 text-gray-500 hover:text-red-500 transition"
                   onClick={(e) => {
                     e.stopPropagation();
-                    console.log("Delete product", product.id);
+                    handleDelete(product.id);
                   }}
+                  className="p-2 text-gray-500 hover:text-red-500"
                 >
                   <TrashIcon className="w-5 h-5" />
                 </button>
+
               </li>
             );
           })}
