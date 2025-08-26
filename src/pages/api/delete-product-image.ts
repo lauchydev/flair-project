@@ -33,11 +33,17 @@ function stripQuery(u?: string | null) {
   return i === -1 ? u : u.slice(0, i);
 }
 
-function gidToNumeric(gid?: string) {
+function gidToNumeric(gid?: string | null) {
   if (!gid) return null;
   const parts = gid.split("/");
   const tail = parts[parts.length - 1];
   return /^\d+$/.test(tail) ? tail : null;
+}
+
+function anyToNumericId(id?: string | null) {
+  if (!id) return null;
+  if (/^\d+$/.test(id)) return id;
+  return gidToNumeric(id);
 }
 
 // ---------- route ----------
@@ -46,16 +52,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (req.method !== "POST") return send(res, 405, { error: "Method not allowed" });
     if (!ADMIN_TOKEN) return send(res, 500, { error: "Missing SHOPIFY_ADMIN_TOKEN" });
 
-    const body = (req.body ?? {}) as { imageId?: string; mediaId?: string; id?: string };
+    const body = (req.body ?? {}) as { imageId?: string; mediaId?: string; id?: string; productId?: string };
     const id = body.imageId || body.mediaId || body.id;
+    const productIdIn = body.productId || "";
     if (!id) return send(res, 400, { error: "Missing image identifier (imageId or mediaId)" });
 
+    const productIdNum = anyToNumericId(productIdIn);
+    const imageIdNum = anyToNumericId(id);
+    if (productIdNum && imageIdNum) {
+      const restUrl = `${ADMIN_REST}/products/${productIdNum}/images/${imageIdNum}.json`;
+      const rRest = await fetch(restUrl, {
+        method: "DELETE",
+        headers: { "X-Shopify-Access-Token": ADMIN_TOKEN },
+      });
+      if (rRest.ok) {
+        return send(res, 200, { ok: true, used: "REST product image delete", productIdNum, imageIdNum });
+      } else {
+        const t = await rRest.text();
+      }
+    }
+
     const looksProductImage =
-      id.startsWith("gid://shopify/ProductImage/") || id.startsWith("gid://shopify/Image/");
+      id.startsWith("gid://shopify/ProductImage/") || id.startsWith("gid://shopify/Image/") || /^\d+$/.test(id);
     const looksMediaImage = id.startsWith("gid://shopify/MediaImage/");
 
-    // 1) Try legacy product image delete first (works for ProductImage IDs)
-    if (looksProductImage || (!looksProductImage && !looksMediaImage)) {
+    if (looksProductImage && !looksMediaImage) {
       const q1 = `
         mutation productImageDelete($id: ID!) {
           productImageDelete(id: $id) {
@@ -73,7 +94,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
       }
 
-      // 2) Resolve the associated MediaImage by URL, then delete via productDeleteMedia
       const qResolve = `
         query resolveMediaFromProductImage($id: ID!) {
           node(id: $id) {
@@ -96,7 +116,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       `;
       const rResolve = await shopifyGraphQL(qResolve, { id });
       if (!rResolve.ok || rResolve.json?.errors?.length) {
-        // As last resort, try GraphQL media delete directly with given id
         const qMediaFallback = `
           mutation productDeleteMedia($mediaIds: [ID!]!) {
             productDeleteMedia(mediaIds: $mediaIds) {
@@ -107,8 +126,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         `;
         const rMediaFallback = await shopifyGraphQL(qMediaFallback, { mediaIds: [id] });
         if (rMediaFallback.ok && !rMediaFallback.json?.errors?.length) {
-          const ue = rMediaFallback.json?.data?.productDeleteMedia?.userErrors || [];
-          if (!ue.length) {
+          const ue2 = rMediaFallback.json?.data?.productDeleteMedia?.userErrors || [];
+          if (!ue2.length) {
             return send(res, 200, {
               ok: true,
               used: "productDeleteMedia (direct id)",
@@ -125,7 +144,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       const node = rResolve.json?.data?.node;
       if (node?.__typename !== "ProductImage") {
-        // Not a ProductImage; try media delete straight away
         const q2 = `
           mutation productDeleteMedia($mediaIds: [ID!]!) {
             productDeleteMedia(mediaIds: $mediaIds) {
@@ -157,7 +175,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const legacyUrl: string = stripQuery(node.url);
       const mediaNodes: Array<any> = node.product?.media?.nodes || [];
 
-      // Try to match by normalized URL
       const match = mediaNodes.find(
         (m) => m?.__typename === "MediaImage" && stripQuery(m?.image?.url) === legacyUrl
       );
@@ -183,20 +200,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             });
           }
         }
-        // fall through to REST as last resort
       }
 
-      // 3) FINAL FALLBACK: REST Admin delete by numeric product + image id
-      const productIdNum = gidToNumeric(productGID);
-      const imageIdNum = gidToNumeric(id);
-      if (productIdNum && imageIdNum) {
-        const restUrl = `${ADMIN_REST}/products/${productIdNum}/images/${imageIdNum}.json`;
+      const productIdNumResolve = gidToNumeric(productGID);
+      const imageIdNumResolve = gidToNumeric(id);
+      if (productIdNumResolve && imageIdNumResolve) {
+        const restUrl = `${ADMIN_REST}/products/${productIdNumResolve}/images/${imageIdNumResolve}.json`;
         const rRest = await fetch(restUrl, {
           method: "DELETE",
           headers: { "X-Shopify-Access-Token": ADMIN_TOKEN },
         });
         if (rRest.ok) {
-          return send(res, 200, { ok: true, used: "REST product image delete", productIdNum, imageIdNum });
+          return send(res, 200, { ok: true, used: "REST product image delete", productIdNum: productIdNumResolve, imageIdNum: imageIdNumResolve });
         } else {
           const t = await rRest.text();
           return send(res, 400, { error: "REST delete failed", status: rRest.status, body: t });
@@ -212,7 +227,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    // 4) If it’s already a MediaImage id, delete via media API
     if (looksMediaImage) {
       const q = `
         mutation productDeleteMedia($mediaIds: [ID!]!) {
