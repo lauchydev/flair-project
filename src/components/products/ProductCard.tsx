@@ -38,7 +38,7 @@ export default function ProductCard({
       {/* Product Image */}
       <div className="aspect-square bg-gradient-to-br from-lime-100 to-purple-100 relative overflow-hidden">
         {featuredImage ? (
-          <Image
+          <img
             src={featuredImage.url}
             alt={featuredImage.altText || title}
             fill
@@ -92,8 +92,8 @@ export default function ProductCard({
         <div className="mb-4">
           <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-2xl border-2 border-black shadow-lg transform -rotate-1 inline-block">
             <span className="text-xl font-black">
-              {hasMultiplePrices ? "FROM " : ""}
-              ${price.amount} {price.currencyCode}
+              {hasMultiplePrices ? "FROM " : ""}${price.amount}{" "}
+              {price.currencyCode}
             </span>
           </div>
           {hasMultiplePrices && (
