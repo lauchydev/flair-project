@@ -5,7 +5,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const { id } = req.query;
   if (!id || typeof id !== "string") {
-    return res.status(400).json({ error: "Missing product ID" });
+    return res.status(400).json({ error: "Missing or invalid product ID" });
   }
 
   const query = `
@@ -15,22 +15,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         title
         description
         descriptionHtml
-        images(first: 20) { edges { node { id url src altText } } }
-        variants(first: 10) { edges { node { id title price } } }
-
-        # Your metafields (namespace: custom)
-        ci: metafield(namespace: "custom", key: "custom_image") {
-          id namespace key type value
-        }
-        ct: metafield(namespace: "custom", key: "custom_text") {
-          id namespace key type value
-        }
-        cc: metafield(namespace: "custom", key: "color_customisation") {
-          id namespace key type value
-        }
-        ca: metafield(namespace: "custom", key: "colours_available") {
-          id namespace key type value
-        }
+        images(first: 20) { edges { node {id url src altText } } }
+        variants(first: 10) { edges { node { id title price inventoryItem { measurement { weight { value unit } } } } } }
+        ci: metafield(namespace: "custom", key: "custom_image") { id namespace key type value }
+        ct: metafield(namespace: "custom", key: "custom_text") { id namespace key type value }
+        cc: metafield(namespace: "custom", key: "color_customisation") { id namespace key type value }
+        ca: metafield(namespace: "custom", key: "colours_available") { id namespace key type value }
+        cipv: metafield(namespace: "custom", key: "custom_image_price_variable") { id namespace key type value }
+        ctpv: metafield(namespace: "custom", key: "custom_text_price_variable") { id namespace key type value }
+        ccpv: metafield(namespace: "custom", key: "colour_customisation_price_variable") { id namespace key type value }
       }
     }
   `;
@@ -49,13 +42,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     );
 
     const json = await response.json();
-    if (!response.ok) {
-      return res.status(500).json({ error: `Shopify error: ${response.statusText}` });
+    console.log("Shopify response:", JSON.stringify(json, null, 2)); // Debug log
+
+    if (!response.ok || json.errors) {
+      console.error("Shopify GraphQL error:", json.errors || json);
+      return res.status(500).json({ error: "Shopify error", details: json.errors || json });
+    }
+
+    if (!json.data || !json.data.product) {
+      return res.status(404).json({ error: "Product not found" });
     }
 
     return res.status(200).json(json.data.product);
   } catch (error: any) {
-    console.error(error);
+    console.error("API Fetch Error:", error);
     return res.status(500).json({ error: "Failed to fetch product" });
   }
 }

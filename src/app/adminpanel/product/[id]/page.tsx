@@ -28,12 +28,14 @@ type Product = {
   description?: string | null;
   descriptionHtml?: string | null;
   images?: { edges: { node: ImageNode }[] };
-  variants?: { edges: { node: { id: string; title: string; price: string } }[] };
-  // metafields
-  ci?: { type: string; value: string | null }; // custom.custom_image
-  ct?: { type: string; value: string | null }; // custom.custom_text
-  cc?: { type: string; value: string | null }; // custom.color_customisation
-  ca?: { type: string; value: string | null }; // custom.colours_available
+  variants?: { edges: { node: { id: string; title: string; price: string; inventoryItem?: { measurement?: { weight?: { value?: number | null; unit?: string | null; }; }; }; } }[] };
+  ci?: { id?: string | null; type: string; value: string | null }; // custom.custom_image
+  ct?: { id?: string | null; type: string; value: string | null }; // custom.custom_text
+  cc?: { id?: string | null; type: string; value: string | null }; // custom.color_customisation
+  ca?: { id?: string | null; type: string; value: string | null }; // custom.colours_available
+  cipv?: { id?: string | null; type: string; value: string | null }; // custom.custom_image_price_variable
+  ctpv?: { id?: string | null; type: string; value: string | null }; // custom.custom_text_price_variable
+  ccpv?: { id?: string | null; type: string; value: string | null }; // custom.colour_customisation_price_variable
 };
 
 export default function ProductDetailsPage() {
@@ -54,6 +56,9 @@ export default function ProductDetailsPage() {
   const [customText, setCustomText] = useState(false);
   const [customColours, setCustomColours] = useState(false);
   const [colours, setColours] = useState<string[]>([]); // #RRGGBB
+  const [customImagePrice, setCustomImagePrice] = useState("0");
+  const [customTextPrice, setCustomTextPrice] = useState("0");
+  const [customColoursPrice, setCustomColoursPrice] = useState("0");
 
   // Carousel state
   const [activeIdx, setActiveIdx] = useState(0);
@@ -85,6 +90,9 @@ export default function ProductDetailsPage() {
       setCustomImage((data.ci?.value || "") === "true");
       setCustomText((data.ct?.value || "") === "true");
       setCustomColours((data.cc?.value || "") === "true");
+      setCustomImagePrice(data.cipv?.value || "");
+      setCustomTextPrice(data.ctpv?.value || "");
+      setCustomColoursPrice(data.ccpv?.value || "");
       try {
         const arr = data.ca?.value ? JSON.parse(data.ca.value) : [];
         setColours(Array.isArray(arr) ? arr : []);
@@ -151,7 +159,16 @@ export default function ProductDetailsPage() {
       const res = await fetch("/api/update-metafields", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: productId, customImage, customText, customColours, colours }),
+        body: JSON.stringify({
+          id: productId, 
+          customImage,
+          customText,
+          customColours,
+          colours,
+          customImagePrice,
+          customTextPrice,
+          customColoursPrice,
+        }),
       });
       const text = await res.text();
       let json: any; try { json = JSON.parse(text); } catch { json = { parseError: true, body: text }; }
@@ -289,6 +306,21 @@ export default function ProductDetailsPage() {
   if (loading) return <p className="p-6">Loading...</p>;
   if (!product) return <p className="p-6">Product not found</p>;
 
+  const firstVariant = product.variants?.edges?.[0]?.node;
+
+  const weightValue = firstVariant?.inventoryItem?.measurement?.weight?.value;
+  const weightUnit = firstVariant?.inventoryItem?.measurement?.weight?.unit;
+
+  const weightDisplay =
+    weightValue != null && weightUnit
+      ? `${weightValue} ${weightUnit.toLowerCase()}`
+      : "No weight info";
+
+  /*const imageUrl =
+    product.images?.edges?.[0]?.node?.url ||
+    product.images?.edges?.[0]?.node?.src ||
+    null;
+  const imageAlt = product.images?.edges?.[0]?.node?.altText || product.title; */ /* Dont know what to do with this, conflict when merging*/
   const primaryUrl = activeImage?.url || activeImage?.src || null;
   const primaryAlt = activeImage?.altText || product.title;
 
@@ -485,17 +517,71 @@ export default function ProductDetailsPage() {
             <div className="flex flex-col gap-2 mb-4">
               <label className="inline-flex items-center gap-2">
                 <span>Custom Image</span>
-                <input type="checkbox" className="w-5 h-5" checked={customImage} onChange={(e) => setCustomImage(e.target.checked)} />
+                <input
+                  type="checkbox"
+                  className="w-5 h-5"
+                  checked={customImage}
+                  onChange={(e) => setCustomImage(e.target.checked)}
+                />
+                  {customImage && (
+                    <div>
+                    <span style={{ marginLeft: '8px' }}>Extra Price</span>
+                    <input 
+                        type="text"
+                        placeholder="Enter a price."
+                        value={customImagePrice}
+                        onChange={(e) => setCustomImagePrice(e.target.value)}
+                        style={{ marginLeft: '6px' }}
+                    />
+                    </div>
+                )}
+                {/* Custom Image Price Variable (only if Custom Image = yes) (TO ADD) */}
               </label>
-
+              <p className="text-sm text-gray-500">Weight: {weightDisplay}</p>
               <label className="inline-flex items-center gap-2">
                 <span>Custom Text</span>
-                <input type="checkbox" className="w-5 h-5" checked={customText} onChange={(e) => setCustomText(e.target.checked)} />
+                <input
+                  type="checkbox"
+                  className="w-5 h-5"
+                  checked={customText}
+                  onChange={(e) => setCustomText(e.target.checked)}
+                />
+                  {customText && (
+                    <div>
+                    <span style={{ marginLeft: '8px' }}>Extra Price</span>
+                    <input 
+                        type="text"
+                        placeholder="Enter a price."
+                        value={customTextPrice}
+                        onChange={(e) => setCustomTextPrice(e.target.value)}
+                        style={{ marginLeft: '6px' }}
+                    />
+                    </div>
+                )}
+                {/* Custom Text Price Variable (only if Custom Image = yes) (TO ADD) */}
               </label>
 
               <label className="inline-flex items-center gap-2">
                 <span>Custom Colour</span>
-                <input type="checkbox" className="w-5 h-5" checked={customColours} onChange={(e) => setCustomColours(e.target.checked)} />
+                <input
+                  type="checkbox"
+                  className="w-5 h-5"
+                  checked={customColours}
+                  onChange={(e) => setCustomColours(e.target.checked)}
+               />
+                {customColours && (
+                    <div>
+                    <span style={{ marginLeft: '8px' }}>Extra Price</span>
+                    <input 
+                        type="text"
+                        placeholder="Enter a price."
+                        value={customColoursPrice}
+                        onChange={(e) => setCustomColoursPrice(e.target.value)}
+                        style={{ marginLeft: '6px' }}
+                    />
+                    </div>
+                )}
+                {/* Custom Colour Price Variable (only if Custom Image = yes) (TO ADD) */}
               </label>
             </div>
 
