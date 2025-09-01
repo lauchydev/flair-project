@@ -3,12 +3,38 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { TrashIcon, PlusIcon } from "@heroicons/react/24/outline";
+import { PlusIcon, UserPlusIcon, TrashIcon } from "@heroicons/react/24/outline";
+
 
 export default function AdminPanelPage() {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+
+async function handleDelete(id: string) {
+  if (!confirm("Are you sure you want to delete this product?")) return;
+
+  try {
+    const res = await fetch("/api/delete-product", {
+      method: "POST",                            // ← change to POST
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+
+    if (!res.ok) {
+      // TEMP DEBUG: show the server message so we know the exact cause
+      const err = await res.json().catch(() => ({}));
+      console.error("Delete error:", res.status, err);
+      throw new Error(err?.message || `Delete failed (${res.status})`);
+    }
+
+    setProducts(prev => prev.filter(p => p.id !== id));
+  } catch (e: any) {
+    alert(e.message || "Could not delete product");
+    console.error(e);
+  }
+}
+
 
   useEffect(() => {
     async function loadProducts() {
@@ -29,15 +55,29 @@ export default function AdminPanelPage() {
     <div className="p-6">
       {/* Header with Add Product button */}
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Admin Panel</h1>
-        <Link
-          href="/adminpanel/product/new"
-          className="inline-flex items-center gap-2 bg-black text-white px-4 py-2 rounded"
-        >
-          <PlusIcon className="w-5 h-5" />
-          <span>Add Product</span>
-        </Link>
-      </div>
+    <h1 className="text-2xl font-bold">Admin Panel</h1>
+
+    <div className="flex items-center gap-2">
+      {/* NEW: Create Account */}
+      <Link
+        href="/adminpanel/create-account"
+        className="inline-flex items-center gap-2 bg-white border px-4 py-2 rounded hover:bg-gray-50"
+      >
+        <UserPlusIcon className="w-5 h-5" />
+        <span>Create Account</span>
+      </Link>
+
+      {/* Existing: Add Product */}
+      <Link
+        href="/adminpanel/product/new"
+        className="inline-flex items-center gap-2 bg-black text-white px-4 py-2 rounded"
+      >
+        <PlusIcon className="w-5 h-5" />
+        <span>Add Product</span>
+      </Link>
+    </div>
+</div>
+
 
       {loading ? (
         <p>Loading...</p>
@@ -83,6 +123,7 @@ export default function AdminPanelPage() {
                   onClick={(e) => {
                     e.stopPropagation();
                     console.log("Delete product", product.id);
+                    handleDelete(product. id);
                   }}
                 >
                   <TrashIcon className="w-5 h-5" />
@@ -95,3 +136,4 @@ export default function AdminPanelPage() {
     </div>
   );
 }
+
