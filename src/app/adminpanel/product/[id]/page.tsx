@@ -24,6 +24,8 @@ type ImageNode = {
 
 type ColourImageMap = Record<string, { front?: string | null; back?: string | null }>;
 
+type ColourImageMap = Record<string, { front?: string | null; back?: string | null }>;
+
 type Product = {
   id: string;
   title: string;
@@ -45,6 +47,7 @@ type Product = {
   cc?: { type: string; value: string | null }; // custom.color_customisation
   ca?: { type: string; value: string | null }; // custom.colours_available
   cim?: { type: string; value: string | null }; // custom.colour_image_map
+  cim?: { type: string; value: string | null }; // custom.colour_image_map
 };
 
 export default function ProductDetailsPage() {
@@ -65,6 +68,10 @@ export default function ProductDetailsPage() {
   const [customText, setCustomText] = useState(false);
   const [customColours, setCustomColours] = useState(false);
   const [colours, setColours] = useState<string[]>([]); // #RRGGBB
+
+  // Selection + derived mapping
+  const [selectedColour, setSelectedColour] = useState<string | null>(null);
+  const [colourImageMap, setColourImageMap] = useState<ColourImageMap>({});
   const [customImagePrice, setCustomImagePrice] = useState("0");
   const [customTextPrice, setCustomTextPrice] = useState("0");
   const [customColoursPrice, setCustomColoursPrice] = useState("0");
@@ -75,6 +82,9 @@ export default function ProductDetailsPage() {
 
   // Carousel state
   const [activeIdx, setActiveIdx] = useState(0);
+
+  // Deleting image state
+  const [deletingImage, setDeletingImage] = useState(false);
 
   // Deleting image state
   const [deletingImage, setDeletingImage] = useState(false);
@@ -114,6 +124,25 @@ export default function ProductDetailsPage() {
     return map;
   }
 
+  function getImageById(imageId?: string | null): ImageNode | null {
+    if (!imageId) return null;
+    const edge = images.find((e) => e.node.id === imageId);
+    return edge?.node || null;
+  }
+
+  function buildSequentialMap(cList: string[], imgEdges: { node: ImageNode }[]): ColourImageMap {
+    const map: ColourImageMap = {};
+    for (let i = 0; i < cList.length; i++) {
+      const frontEdge = imgEdges[2 * i];
+      const backEdge = imgEdges[2 * i + 1];
+      map[cList[i]] = {
+        front: frontEdge?.node?.id ?? null,
+        back: backEdge?.node?.id ?? null,
+      };
+    }
+    return map;
+  }
+
   async function loadProduct() {
     const res = await fetch(`/api/get-product?id=${encodeURIComponent(productId)}`, { cache: "no-store" });
     const data = (await res.json()) as Product | null;
@@ -125,6 +154,7 @@ export default function ProductDetailsPage() {
       setCustomImage((data.ci?.value || "") === "true");
       setCustomText((data.ct?.value || "") === "true");
       setCustomColours((data.cc?.value || "") === "true");
+
       setCustomImagePrice(data.cipv?.value || "");
       setCustomTextPrice(data.ctpv?.value || "");
       setCustomColoursPrice(data.ccpv?.value || "");
@@ -134,9 +164,13 @@ export default function ProductDetailsPage() {
         const list = Array.isArray(arr) ? arr : [];
         setColours(list);
         if (!selectedColour && list.length) setSelectedColour(list[0]);
+        const list = Array.isArray(arr) ? arr : [];
+        setColours(list);
+        if (!selectedColour && list.length) setSelectedColour(list[0]);
       } catch {
         setColours([]);
       }
+      setColourImageMap({});
       setColourImageMap({});
     }
   }
@@ -156,6 +190,11 @@ export default function ProductDetailsPage() {
 
   useEffect(() => { if (editingTitle) titleInputRef.current?.focus(); }, [editingTitle]);
   useEffect(() => { if (editingDesc)  descTextareaRef.current?.focus(); }, [editingDesc]);
+
+  useEffect(() => {
+    const next = buildSequentialMap(colours, images);
+    setColourImageMap(next);
+  }, [colours, images]);
 
   useEffect(() => {
     const next = buildSequentialMap(colours, images);
@@ -202,6 +241,7 @@ export default function ProductDetailsPage() {
       const res = await fetch("/api/update-metafields", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: productId, customImage, customText, customColours, colours, colourImageMap }),
         body: JSON.stringify({
           id: productId, 
           customImage,
@@ -224,6 +264,7 @@ export default function ProductDetailsPage() {
     } catch (e: any) { alert(`Network error: ${e?.message || e}`); }
   }
 
+  // Colour picking
   // Colour picking
   async function pickColour() {
     // @ts-ignore
@@ -284,6 +325,7 @@ export default function ProductDetailsPage() {
   }
 
   // Delete current image
+  // Delete current image
   async function deleteCurrentImage() {
     const node = activeImage;
     const id = node?.id;
@@ -294,7 +336,9 @@ export default function ProductDetailsPage() {
     if (!confirm("Remove this image from the product?")) return;
 
     setDeletingImage(true);
+    setDeletingImage(true);
     try {
+      const res = await fetch("/api/delete-product-image", {
       const res = await fetch("/api/delete-product-image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -305,7 +349,15 @@ export default function ProductDetailsPage() {
       });
 
       const text = await res.text();
+        body: JSON.stringify({
+          imageId: id,                 // gid://shopify/ProductImage/... OR gid://shopify/MediaImage/...
+          productId: product?.id || "",// helps REST fallback (we'll accept either gid or numeric)
+        }),
+      });
+
+      const text = await res.text();
       let payload: any;
+      try { payload = JSON.parse(text); } catch { payload = { nonJson: true, body: text }; }
       try { payload = JSON.parse(text); } catch { payload = { nonJson: true, body: text }; }
 
       if (!res.ok) {
@@ -316,19 +368,28 @@ export default function ProductDetailsPage() {
           payload?.body ||
           `HTTP ${res.status}`;
         console.error("[delete] failed payload:", payload);
+          `HTTP ${res.status}`;
+        console.error("[delete] failed payload:", payload);
         alert(`Failed to delete image\n\nID: ${id}\n${msg}`);
         return;
       }
 
       // Refresh product (mapping will auto-recompute from images)
+      // Refresh product (mapping will auto-recompute from images)
       await loadProduct?.();
+
+      // If we just deleted the last image, ensure index is clamped
+      setActiveIdx((prev) => Math.max(0, Math.min(prev, (product?.images?.edges?.length ?? 1) - 1)));
 
       // If we just deleted the last image, ensure index is clamped
       setActiveIdx((prev) => Math.max(0, Math.min(prev, (product?.images?.edges?.length ?? 1) - 1)));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error("[delete] network error", message);
+      console.error("[delete] network error", message);
       alert(`Network error: ${message}`);
+    } finally {
+      setDeletingImage(false);
     } finally {
       setDeletingImage(false);
     }
@@ -338,6 +399,9 @@ export default function ProductDetailsPage() {
   if (loading) return <p className="p-6">Loading...</p>;
   if (!product) return <p className="p-6">Product not found</p>;
 
+  const primaryNode = activeImage;
+  const primaryUrl = primaryNode?.url || primaryNode?.src || null;
+  const primaryAlt = primaryNode?.altText || product.title;
   const firstVariant = product.variants?.edges?.[0]?.node;
 
   const weightValue = firstVariant?.inventoryItem?.measurement?.weight?.value;
@@ -405,7 +469,12 @@ export default function ProductDetailsPage() {
                   className={`absolute top-2 right-2 p-2 rounded bg-white/90 hover:bg-white shadow
                               ${deletingImage ? "opacity-60 cursor-not-allowed" : ""}`}
                   title={deletingImage ? "Deleting..." : "Delete image"}
+                  disabled={deletingImage}
+                  className={`absolute top-2 right-2 p-2 rounded bg-white/90 hover:bg-white shadow
+                              ${deletingImage ? "opacity-60 cursor-not-allowed" : ""}`}
+                  title={deletingImage ? "Deleting..." : "Delete image"}
                   type="button"
+                  aria-disabled={deletingImage}
                   aria-disabled={deletingImage}
                 >
                   <TrashIcon className="w-5 h-5 text-red-600" />
@@ -640,7 +709,94 @@ export default function ProductDetailsPage() {
                       <PlusIcon className="w-5 h-5 text-gray-700" />
                     </button>
                   </div>
+              <>
+                <div className="mb-3">
+                  <div className="inline-flex items-center gap-2 mb-2">
+                    <span className="font-medium">Colours Available</span>
+                    <button onClick={pickColour} className="p-1 rounded hover:bg-gray-100" title="Pick colour" type="button">
+                      <EyeDropperIcon className="w-5 h-5 text-gray-700" />
+                    </button>
+                    <button
+                      onClick={() => setColours((prev) => [...prev, "#000000"])}
+                      className="p-1 rounded hover:bg-gray-100"
+                      title="Add colour"
+                      type="button"
+                    >
+                      <PlusIcon className="w-5 h-5 text-gray-700" />
+                    </button>
+                  </div>
 
+                  {colours.length === 0 ? (
+                    <p className="text-sm text-gray-500">No colours yet.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-3">
+                      {colours.map((hex, idx) => (
+                        <div key={`${hex}-${idx}`} className="flex items-center gap-2">
+                          <div
+                            className="w-8 h-8 rounded border cursor-pointer"
+                            style={{ backgroundColor: hex }}
+                            title={`${hex} — click to remove`}
+                            onClick={() => setColours((prev) => prev.filter((_, i) => i !== idx))}
+                          />
+                          <input
+                            type="text"
+                            value={hex}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setColours((prev) => prev.map((c, i) => (i === idx ? v : c)));
+                            }}
+                            className="w-28 px-2 py-1 border rounded text-sm"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Select active colour */}
+                {colours.length > 0 && (
+                  <div className="mb-3">
+                    <div className="font-medium mb-1">Select Colour</div>
+                    <div className="flex flex-wrap gap-2">
+                      {colours.map((hex) => (
+                        <button
+                          key={hex}
+                          type="button"
+                          onClick={() => setSelectedColour(hex)}
+                          className={`w-8 h-8 rounded-full border ${selectedColour === hex ? "ring-2 ring-black" : ""}`}
+                          title={`Use ${hex}`}
+                          style={{ backgroundColor: hex }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Compact front/back preview for the selected colour (no picker) */}
+                {selectedColour && (
+                  <div className="mt-4 p-3 border rounded">
+                    <div className="inline-flex gap-3">
+                      {(["front", "back"] as const).map((side) => {
+                        const id = colourImageMap[selectedColour]?.[side] ?? null;
+                        const node = getImageById(id);
+                        const src = node?.url || node?.src || "";
+                        return (
+                          <div key={side} className="border rounded p-2">
+                            <div className="text-xs text-gray-500 mb-1 capitalize">{side}</div>
+                            <div className="w-32 h-32 bg-gray-100 rounded overflow-hidden flex items-center justify-center">
+                              {src ? (
+                                <img src={src} alt={`${side} preview`} className="w-full h-full object-contain" />
+                              ) : (
+                                <span className="text-gray-400 text-xs">Blank</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
                   {colours.length === 0 ? (
                     <p className="text-sm text-gray-500">No colours yet.</p>
                   ) : (
