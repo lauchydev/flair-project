@@ -192,6 +192,18 @@ export default function ProductDetailsPage() {
         setDraftWeight(weightValue != null ? String(weightValue) : "");
       }
 
+      const firstVariant = data.variants?.edges?.[0]?.node;
+      if (!editingSku) setDraftSku(firstVariant?.sku ?? "");
+      if (!editingBarcode) setDraftBarcode(firstVariant?.barcode ?? "");
+      if (!editingStock) setDraftStock(firstVariant?.inventoryQuantity != null ? String(firstVariant.inventoryQuantity) : "");
+
+      const weightValue = firstVariant?.inventoryItem?.measurement?.weight?.value;
+      const weightUnit = firstVariant?.inventoryItem?.measurement?.weight?.unit;
+      if (!editingWeight) {
+        setDraftWeight(weightValue != null ? String(weightValue) : "");
+        setDraftWeightUnit(weightUnit ? weightUnit.toLowerCase() : "kg");
+      }
+
       // colours
       try {
         const arr = data.ca?.value ? JSON.parse(data.ca.value) : [];
