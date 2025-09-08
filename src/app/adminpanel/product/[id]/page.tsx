@@ -94,7 +94,6 @@ export default function ProductDetailsPage() {
   const [draftBarcode, setDraftBarcode] = useState("");
   const [draftStock, setDraftStock] = useState("");
   const [draftWeight, setDraftWeight] = useState("");
-  const [draftWeightUnit, setDraftWeightUnit] = useState("kg");
 
   // Metafields toggles + prices
   const [customImage, setCustomImage] = useState(false);
@@ -178,10 +177,8 @@ export default function ProductDetailsPage() {
       if (!editingStock) setDraftStock(firstVariant?.inventoryQuantity != null ? String(firstVariant.inventoryQuantity) : "");
 
       const weightValue = firstVariant?.inventoryItem?.measurement?.weight?.value;
-      const weightUnit = firstVariant?.inventoryItem?.measurement?.weight?.unit;
       if (!editingWeight) {
         setDraftWeight(weightValue != null ? String(weightValue) : "");
-        setDraftWeightUnit(weightUnit ? weightUnit.toLowerCase() : "kg");
       }
 
       // colours
@@ -1036,20 +1033,10 @@ export default function ProductDetailsPage() {
                               className="border rounded px-2 py-1 w-24"
                               min="0"
                             />
-                            <select
-                              value={draftWeightUnit}
-                              onChange={e => setDraftWeightUnit(e.target.value)}
-                              className="border rounded px-2 py-1"
-                            >
-                              <option value="kg">kg</option>
-                              <option value="g">g</option>
-                              <option value="lb">lb</option>
-                              <option value="oz">oz</option>
-                            </select>
                             <button onClick={saveWeight} className="p-2 rounded bg-black text-white" title="Save Weight" type="button">
                               <CheckIcon className="w-4 h-4" />
                             </button>
-                            <button onClick={() => { setEditingWeight(false); setDraftWeight(weightDisplay.split(' ')[0] || ""); setDraftWeightUnit(weightDisplay.split(' ')[1] || "kg"); }} className="p-2 rounded border" title="Cancel" type="button">
+                            <button onClick={() => { setEditingWeight(false); setDraftWeight(weightDisplay.split(' ')[0] || ""); }} className="p-2 rounded border" title="Cancel" type="button">
                               <XMarkIcon className="w-4 h-4" />
                             </button>
                           </>

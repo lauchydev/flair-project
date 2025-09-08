@@ -55,7 +55,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (typeof weight === "string") {
       const [value, unit] = weight.split(" ");
       payload.variant.weight = Number(value);
-      payload.variant.weight_unit = unit || "kg";
     }
 
     // Update the variant (SKU, barcode, weight)
