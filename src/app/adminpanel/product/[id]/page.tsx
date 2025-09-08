@@ -944,16 +944,123 @@ export default function ProductDetailsPage() {
 
           {/* Variants (optional) */}
           {product.variants?.edges?.length ? (
-            <div className="mt-8">
-              <h3 className="text-xl font-semibold mb-2">Product Details</h3>
+            <div className="mt-8 p-4 border rounded">
+              <h3 className="text-xl font-semibold mb-4">Product Details</h3>
               <ul className="space-y-1">
                 {product.variants.edges.map(({ node }) => (
                   <li key={node.id} className="text-sm text-gray-600">
                     {node.title} — ${node.price}
-                    <br />
-                    <span>SKU: {skuDisplay}</span> | <span>Barcode: {barcodeDisplay}</span> | <span>Stock: {stockDisplay}</span>
-                    <br />
-                    <span>Weight: {weightDisplay}</span>
+                    <div className="mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">SKU:</span>
+                        {!editingSku ? (
+                          <span>{skuDisplay}</span>
+                        ) : (
+                          <>
+                            <input value={draftSku} onChange={e => setDraftSku(e.target.value)} className="border rounded px-2 py-1" />
+                            <button onClick={saveSku} className="p-2 rounded bg-black text-white" title="Save SKU" type="button">
+                              <CheckIcon className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => { setEditingSku(false); setDraftSku(skuDisplay); }} className="p-2 rounded border" title="Cancel" type="button">
+                              <XMarkIcon className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
+                        {!editingSku && (
+                          <button onClick={() => setEditingSku(true)} className="p-2 rounded hover:bg-gray-100" title="Edit SKU" type="button">
+                            <PencilSquareIcon className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {/* Barcode with pencil */}
+                    <div className="mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">Barcode:</span>
+                        {!editingBarcode ? (
+                          <span>{barcodeDisplay}</span>
+                        ) : (
+                          <>
+                            <input value={draftBarcode} onChange={e => setDraftBarcode(e.target.value)} className="border rounded px-2 py-1" />
+                            <button onClick={saveBarcode} className="p-2 rounded bg-black text-white" title="Save Barcode" type="button">
+                              <CheckIcon className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => { setEditingBarcode(false); setDraftBarcode(barcodeDisplay); }} className="p-2 rounded border" title="Cancel" type="button">
+                              <XMarkIcon className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
+                        {!editingBarcode && (
+                          <button onClick={() => setEditingBarcode(true)} className="p-2 rounded hover:bg-gray-100" title="Edit Barcode" type="button">
+                            <PencilSquareIcon className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {/* Stock with pencil */}
+                    <div className="mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">Stock:</span>
+                        {!editingStock ? (
+                          <span>{stockDisplay}</span>
+                        ) : (
+                          <>
+                            <input value={draftStock} onChange={e => setDraftStock(e.target.value)} className="border rounded px-2 py-1" />
+                            <button onClick={saveStock} className="p-2 rounded bg-black text-white" title="Save Stock" type="button">
+                              <CheckIcon className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => { setEditingStock(false); setDraftStock(String(stockDisplay)); }} className="p-2 rounded border" title="Cancel" type="button">
+                              <XMarkIcon className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
+                        {!editingStock && (
+                          <button onClick={() => setEditingStock(true)} className="p-2 rounded hover:bg-gray-100" title="Edit Stock" type="button">
+                            <PencilSquareIcon className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {/* Weight with pencil */}
+                    <div className="mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">Weight:</span>
+                        {!editingWeight ? (
+                          <span>{weightDisplay}</span>
+                        ) : (
+                          <>
+                            <input
+                              type="number"
+                              value={draftWeight}
+                              onChange={e => setDraftWeight(e.target.value)}
+                              className="border rounded px-2 py-1 w-24"
+                              min="0"
+                            />
+                            <select
+                              value={draftWeightUnit}
+                              onChange={e => setDraftWeightUnit(e.target.value)}
+                              className="border rounded px-2 py-1"
+                            >
+                              <option value="kg">kg</option>
+                              <option value="g">g</option>
+                              <option value="lb">lb</option>
+                              <option value="oz">oz</option>
+                            </select>
+                            <button onClick={saveWeight} className="p-2 rounded bg-black text-white" title="Save Weight" type="button">
+                              <CheckIcon className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => { setEditingWeight(false); setDraftWeight(weightDisplay.split(' ')[0] || ""); setDraftWeightUnit(weightDisplay.split(' ')[1] || "kg"); }} className="p-2 rounded border" title="Cancel" type="button">
+                              <XMarkIcon className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
+                        {!editingWeight && (
+                          <button onClick={() => setEditingWeight(true)} className="p-2 rounded hover:bg-gray-100" title="Edit Weight" type="button">
+                            <PencilSquareIcon className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </li>
                 ))}
               </ul>
