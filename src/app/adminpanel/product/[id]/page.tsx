@@ -793,7 +793,14 @@ export default function ProductDetailsPage() {
                   <button onClick={saveDescription} className="p-2 rounded bg-black text-white" title="Save">
                     <CheckIcon className="w-5 h-5" />
                   </button>
-                  <button onClick={() => { setEditingDesc(false); setDraftDesc(currentDesc); }} className="p-2 rounded border" title="Cancel">
+                  <button
+                    onClick={() => {
+                      setEditingDesc(false);
+                      setDraftDesc(currentDesc);
+                    }}
+                    className="p-2 rounded border"
+                    title="Cancel"
+                  >
                     <XMarkIcon className="w-5 h-5" />
                   </button>
                 </div>
