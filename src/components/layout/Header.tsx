@@ -2,11 +2,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ShoppingCartIcon, UserIcon } from "@heroicons/react/24/outline";
-import LogoutButton from "@/components/layout/LogoutButton"; // <-- add this
+import LogoutButton from "@/components/layout/LogoutButton";
 
 export default function Header() {
   const pathname = usePathname();
-  const onAdmin = pathname?.startsWith("/adminpanel");
+  const showLogout =
+    pathname?.startsWith("/products") || pathname?.startsWith("/adminpanel");
 
   return (
     <header className="bg-white shadow-sm">
@@ -48,11 +49,9 @@ export default function Header() {
               <ShoppingCartIcon className="w-6 h-6 text-black" />
             </Link>
 
-            {onAdmin ? (
-              // When on admin pages, show Logout
+            {showLogout ? (
               <LogoutButton />
             ) : (
-              // Else, show Login
               <Link href="/login" aria-label="Login">
                 <UserIcon className="w-6 h-6 text-black hover:text-gray-700" />
               </Link>
