@@ -72,6 +72,7 @@ type Product = {
   cipv?: { id?: string | null; type: string; value: string | null }; // custom.custom_image_price_variable
   ctpv?: { id?: string | null; type: string; value: string | null }; // custom.custom_text_price_variable
   ccpv?: { id?: string | null; type: string; value: string | null }; // custom.colour_customisation_price_variable
+  po?: { id?: string | null; type: string; value: string | null }; // custom.product_owner
 };
 
 export default function ProductDetailsPage() {
@@ -88,6 +89,7 @@ export default function ProductDetailsPage() {
   const [editingBarcode, setEditingBarcode] = useState(false);
   const [editingStock, setEditingStock] = useState(false);
   const [editingWeight, setEditingWeight] = useState(false);
+  const [editingProductOwner, setEditingProductOwner] = useState(false);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftDesc, setDraftDesc] = useState("");
   const [draftSku, setDraftSku] = useState("");
@@ -102,6 +104,9 @@ export default function ProductDetailsPage() {
   const [customImagePrice, setCustomImagePrice] = useState("0");
   const [customTextPrice, setCustomTextPrice] = useState("0");
   const [customColoursPrice, setCustomColoursPrice] = useState("0");
+  const [productOwner, setProductOwner] = useState("");
+
+
 
   // Colours + mapping
   const [colours, setColours] = useState<string[]>([]); // #RRGGBB
@@ -122,6 +127,9 @@ export default function ProductDetailsPage() {
 
   const images = product?.images?.edges ?? [];
   const activeImage = images[activeIdx]?.node;
+
+  //temp designer emails
+  const designeremails = ["designer1@example.com", "designer2@example.com", "test@example.com"];
 
   const currentDesc = useMemo(() => {
     if (!product) return "";
@@ -170,6 +178,7 @@ export default function ProductDetailsPage() {
       setCustomImagePrice(data.cipv?.value || "0");
       setCustomTextPrice(data.ctpv?.value || "0");
       setCustomColoursPrice(data.ccpv?.value || "0");
+      setProductOwner(data.po?.value || "");
 
       const firstVariant = data.variants?.edges?.[0]?.node;
       if (!editingSku) setDraftSku(firstVariant?.sku ?? "");
@@ -406,6 +415,7 @@ export default function ProductDetailsPage() {
           customImagePrice,
           customTextPrice,
           customColoursPrice,
+          productOwner: productOwner === "" ? "None@Set.test" : productOwner,
         }),
       });
       const text = await res.text();
@@ -424,6 +434,7 @@ export default function ProductDetailsPage() {
           "Unknown error";
         return alert(`Save failed:\n${msg}`);
       }
+      await loadProduct();
       alert("Options saved!");
     } catch (e: any) {
       alert(`Network error: ${e?.message || e}`);
@@ -1043,6 +1054,63 @@ export default function ProductDetailsPage() {
                         )}
                         {!editingWeight && (
                           <button onClick={() => setEditingWeight(true)} className="p-2 rounded hover:bg-gray-100" title="Edit Weight" type="button">
+                            <PencilSquareIcon className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {/* Product Owner */}
+                    <div className="mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">Product Owner:</span>
+                        {!editingProductOwner ? (
+                          <span>{!productOwner || productOwner === "None@Set.test" ? "None Set" : productOwner}</span>
+                        ) : (
+                          <>
+                            <select
+                              value={productOwner}
+                              onChange={e => setProductOwner(e.target.value)}
+                              className="border rounded px-2 py-1"
+                            >
+                              <option value="">None set</option>
+                              {designeremails.map(email => (
+                                <option key={email} value={email}>{email}</option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={async () => {
+                                setEditingProductOwner(false);
+                                await handleSaveMetafields();
+                              }}
+                              className="p-2 rounded bg-black text-white"
+                              title="Save Product Owner"
+                              type="button"
+                            >
+                              <CheckIcon className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingProductOwner(false);
+                                setProductOwner(product.po?.value || "");
+                              }}
+                              className="p-2 rounded border"
+                              title="Cancel"
+                              type="button"
+                            >
+                              <XMarkIcon className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
+                        {!editingProductOwner && (
+                          <button
+                            onClick={() => {
+                              setEditingProductOwner(true);
+                              setProductOwner(product.po?.value || "");
+                            }}
+                            className="p-2 rounded hover:bg-gray-100"
+                            title="Edit Product Owner"
+                            type="button"
+                          >
                             <PencilSquareIcon className="w-4 h-4" />
                           </button>
                         )}
