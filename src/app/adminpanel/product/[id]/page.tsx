@@ -7,7 +7,7 @@ import {
   ArrowLeftIcon,
   PencilSquareIcon,
   PlusIcon,
-  EyeDropperIcon, // NOTE: correct spelling from heroicons
+  EyeDropperIcon,
   CheckIcon,
   XMarkIcon,
   ChevronLeftIcon,
@@ -22,17 +22,36 @@ type ImageNode = {
   altText?: string | null;
 };
 
+type VariantNode = {
+  id: string;
+  title: string;
+  price: string;
+  inventoryItem?: {
+    measurement?: {
+      weight?: {
+        value?: number | null;
+        unit?: string | null;
+      };
+    };
+  };
+};
+
+type ColourImageMap = Record<string, { front?: string | null; back?: string | null }>;
+
 type Product = {
   id: string;
   title: string;
   description?: string | null;
   descriptionHtml?: string | null;
   images?: { edges: { node: ImageNode }[] };
-  variants?: { edges: { node: { id: string; title: string; price: string; inventoryItem?: { measurement?: { weight?: { value?: number | null; unit?: string | null; }; }; }; } }[] };
-  ci?: { id?: string | null; type: string; value: string | null }; // custom.custom_image
-  ct?: { id?: string | null; type: string; value: string | null }; // custom.custom_text
-  cc?: { id?: string | null; type: string; value: string | null }; // custom.color_customisation
-  ca?: { id?: string | null; type: string; value: string | null }; // custom.colours_available
+  variants?: { edges: { node: VariantNode }[] };
+
+  // metafields
+  ci?:   { id?: string | null; type: string; value: string | null }; // custom.custom_image
+  ct?:   { id?: string | null; type: string; value: string | null }; // custom.custom_text
+  cc?:   { id?: string | null; type: string; value: string | null }; // custom.color_customisation
+  ca?:   { id?: string | null; type: string; value: string | null }; // custom.colours_available (JSON array)
+  cim?:  { id?: string | null; type: string; value: string | null }; // custom.colour_image_map (JSON)
   cipv?: { id?: string | null; type: string; value: string | null }; // custom.custom_image_price_variable
   ctpv?: { id?: string | null; type: string; value: string | null }; // custom.custom_text_price_variable
   ccpv?: { id?: string | null; type: string; value: string | null }; // custom.colour_customisation_price_variable
@@ -45,28 +64,34 @@ export default function ProductDetailsPage() {
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Inline edit states
+  // Inline edit
   const [editingTitle, setEditingTitle] = useState(false);
   const [editingDesc, setEditingDesc] = useState(false);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftDesc, setDraftDesc] = useState("");
 
-  // Metafields UI
+  // Metafields toggles + prices
   const [customImage, setCustomImage] = useState(false);
   const [customText, setCustomText] = useState(false);
   const [customColours, setCustomColours] = useState(false);
-  const [colours, setColours] = useState<string[]>([]); // #RRGGBB
   const [customImagePrice, setCustomImagePrice] = useState("0");
   const [customTextPrice, setCustomTextPrice] = useState("0");
   const [customColoursPrice, setCustomColoursPrice] = useState("0");
 
+  // Colours + mapping
+  const [colours, setColours] = useState<string[]>([]); // #RRGGBB
+  const [selectedColour, setSelectedColour] = useState<string | null>(null);
+  const [colourImageMap, setColourImageMap] = useState<ColourImageMap>({});
+
   // Carousel state
   const [activeIdx, setActiveIdx] = useState(0);
+  const [deletingImage, setDeletingImage] = useState(false);
 
-  // Local upload
+  // Upload
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
 
+  // Refs for autofocus
   const titleInputRef = useRef<HTMLInputElement>(null);
   const descTextareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -79,29 +104,74 @@ export default function ProductDetailsPage() {
     return product.description || "";
   }, [product]);
 
-  async function loadProduct() {
+  // Helpers
+  function getImageById(imageId?: string | null): ImageNode | null {
+    if (!imageId) return null;
+    const edge = images.find((e) => e.node.id === imageId);
+    return edge?.node || null;
+  }
+
+  function buildSequentialMap(cList: string[], imgEdges: { node: ImageNode }[]): ColourImageMap {
+    // Enforces: image order is [c0.front, c0.back, c1.front, c1.back, ...]
+    const map: ColourImageMap = {};
+    for (let i = 0; i < cList.length; i++) {
+      const frontEdge = imgEdges[2 * i];
+      const backEdge = imgEdges[2 * i + 1];
+      map[cList[i]] = {
+        front: frontEdge?.node?.id ?? null,
+        back: backEdge?.node?.id ?? null,
+      };
+    }
+    return map;
+  }
+
+  // Load product
+  async function loadProduct(): Promise<Product | null> {
     const res = await fetch(`/api/get-product?id=${encodeURIComponent(productId)}`, { cache: "no-store" });
     const data = (await res.json()) as Product | null;
     setProduct(data);
 
     if (data) {
+      // text
       setDraftTitle(data.title);
       setDraftDesc(data.descriptionHtml || data.description || "");
+
+      // toggles
       setCustomImage((data.ci?.value || "") === "true");
       setCustomText((data.ct?.value || "") === "true");
       setCustomColours((data.cc?.value || "") === "true");
-      setCustomImagePrice(data.cipv?.value || "");
-      setCustomTextPrice(data.ctpv?.value || "");
-      setCustomColoursPrice(data.ccpv?.value || "");
+
+      // prices
+      setCustomImagePrice(data.cipv?.value || "0");
+      setCustomTextPrice(data.ctpv?.value || "0");
+      setCustomColoursPrice(data.ccpv?.value || "0");
+
+      // colours
       try {
         const arr = data.ca?.value ? JSON.parse(data.ca.value) : [];
-        setColours(Array.isArray(arr) ? arr : []);
+        const list = Array.isArray(arr) ? (arr as string[]) : [];
+        setColours(list);
+        if (!selectedColour && list.length) setSelectedColour(list[0]);
       } catch {
         setColours([]);
       }
+
+      // mapping — prefer server value if present, otherwise derive sequentially
+      try {
+        const m = data.cim?.value ? (JSON.parse(data.cim.value) as ColourImageMap) : null;
+        if (m && typeof m === "object") {
+          setColourImageMap(m);
+        } else {
+          setColourImageMap(buildSequentialMap(colours, data.images?.edges ?? []));
+        }
+      } catch {
+        setColourImageMap(buildSequentialMap(colours, data.images?.edges ?? []));
+      }
     }
+    return data;
   }
 
+  // Effects
   useEffect(() => {
     if (!productId) return;
     (async () => {
@@ -113,13 +183,30 @@ export default function ProductDetailsPage() {
         setLoading(false);
       }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productId]);
 
-  // Auto-focus when entering edit
   useEffect(() => { if (editingTitle) titleInputRef.current?.focus(); }, [editingTitle]);
   useEffect(() => { if (editingDesc)  descTextareaRef.current?.focus(); }, [editingDesc]);
 
-  // --- Save title/description
+  // Whenever colours or images change, recompute a sequential map IF we don't already have ids for the colour
+  useEffect(() => {
+    if (!colours.length) { setColourImageMap({}); return; }
+    setColourImageMap((prev) => {
+      // If prev already has ids for a given colour, keep them; otherwise fill from image order.
+      const seq = buildSequentialMap(colours, images);
+      const merged: ColourImageMap = {};
+      for (const c of colours) {
+        merged[c] = {
+          front: prev[c]?.front ?? seq[c]?.front ?? null,
+          back:  prev[c]?.back  ?? seq[c]?.back  ?? null,
+        };
+      }
+      return merged;
+    });
+  }, [colours, images]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Save title/description
   async function saveTitle() {
     if (!product) return;
     try {
@@ -152,7 +239,7 @@ export default function ProductDetailsPage() {
     } catch (e: any) { alert(`Network error: ${e?.message || e}`); }
   }
 
-  // --- Save metafields
+  // Save metafields (includes prices + mapping)
   async function handleSaveMetafields() {
     if (!product) return;
     try {
@@ -160,11 +247,12 @@ export default function ProductDetailsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id: productId, 
+          id: productId,
           customImage,
           customText,
           customColours,
           colours,
+          colourImageMap,
           customImagePrice,
           customTextPrice,
           customColoursPrice,
@@ -180,7 +268,7 @@ export default function ProductDetailsPage() {
     } catch (e: any) { alert(`Network error: ${e?.message || e}`); }
   }
 
-  // Eyedropper + fallback
+  // Colour picking
   async function pickColour() {
     // @ts-ignore
     if (window.EyeDropper) {
@@ -203,7 +291,7 @@ export default function ProductDetailsPage() {
     }
   }
 
-  // --- Carousel controls
+  // Carousel
   function nextImage() {
     if (!images.length) return;
     setActiveIdx((i) => (i + 1) % images.length);
@@ -213,7 +301,7 @@ export default function ProductDetailsPage() {
     setActiveIdx((i) => (i - 1 + images.length) % images.length);
   }
 
-  // --- Local file upload
+  // Upload
   function openFilePicker() { fileInputRef.current?.click(); }
   function onFilesChosen(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files ? Array.from(e.target.files) : [];
@@ -229,9 +317,11 @@ export default function ProductDetailsPage() {
       const res = await fetch("/api/upload-product-images", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) return alert(data?.error || "Upload failed");
-      await loadProduct();
+
+      const updated = await loadProduct();
+      const newLen = updated?.images?.edges?.length ?? 0;
+      if (newLen > 0) setActiveIdx(newLen - 1); // jump to last
       setPendingFiles([]);
-      setActiveIdx((product?.images?.edges?.length ?? 1) - 1);
     } catch (e: any) {
       alert(`Network error: ${e?.message || e}`);
     } finally {
@@ -239,90 +329,68 @@ export default function ProductDetailsPage() {
     }
   }
 
-  // --- Delete current image 
+  // Delete
   async function deleteCurrentImage() {
     const node = activeImage;
     const id = node?.id;
-
     if (!id) {
       alert("This image has no id. Ensure your product query returns image { id }.");
       return;
     }
     if (!confirm("Remove this image from the product?")) return;
-    const apiPath = "/api/delete-product-image";
 
+    setDeletingImage(true);
     try {
-      console.log("[deleteCurrentImage] sending", { apiPath, imageId: id });
-
-      const res = await fetch(apiPath, {
+      const res = await fetch("/api/delete-product-image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageId: id }),
+        body: JSON.stringify({
+          imageId: id,                  // gid://shopify/ProductImage/... OR gid://shopify/MediaImage/...
+          productId: product?.id || "", // helps REST fallback if needed
+        }),
       });
 
-      const status = res.status;
-      const statusText = res.statusText;
       const bodyText = await res.text();
-
-      // Try to parse JSON but keep raw text if not JSON
       let payload: any;
-      try {
-        payload = JSON.parse(bodyText);
-      } catch {
-        payload = { nonJson: true, body: bodyText };
-      }
-
-      console.log("[deleteCurrentImage] response", { status, statusText, payload });
+      try { payload = JSON.parse(bodyText); } catch { payload = { nonJson: true, body: bodyText }; }
 
       if (!res.ok) {
         const msg =
           payload?.error ||
           payload?.raw?.errors?.[0]?.message ||
-          payload?.r1?.json?.errors?.[0]?.message ||
-          payload?.r2?.json?.errors?.[0]?.message ||
           payload?.raw?.data?.productDeleteMedia?.userErrors?.[0]?.message ||
           payload?.raw?.data?.productImageDelete?.userErrors?.[0]?.message ||
           payload?.body ||
-          `HTTP ${status} ${statusText}`;
-
-        console.error("Delete failed payload:", payload);
+          `HTTP ${res.status}`;
+        console.error("[delete] failed payload:", payload);
         alert(`Failed to delete image\n\nID: ${id}\n${msg}`);
         return;
       }
 
-      // Success — refresh
-      await loadProduct?.();
-      // setActiveIdx?.(0);
+      const updated = await loadProduct();
+      const newLen = updated?.images?.edges?.length ?? 0;
+      setActiveIdx((prev) => Math.max(0, Math.min(prev, Math.max(0, newLen - 1))));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      console.error("[deleteCurrentImage] network error", message);
+      console.error("[delete] network error", message);
       alert(`Network error: ${message}`);
+    } finally {
+      setDeletingImage(false);
     }
   }
-
-
-
 
   if (loading) return <p className="p-6">Loading...</p>;
   if (!product) return <p className="p-6">Product not found</p>;
 
+  const primaryNode = activeImage;
+  const primaryUrl = primaryNode?.url || primaryNode?.src || null;
+  const primaryAlt = primaryNode?.altText || product.title;
+
   const firstVariant = product.variants?.edges?.[0]?.node;
-
   const weightValue = firstVariant?.inventoryItem?.measurement?.weight?.value;
-  const weightUnit = firstVariant?.inventoryItem?.measurement?.weight?.unit;
-
+  const weightUnit  = firstVariant?.inventoryItem?.measurement?.weight?.unit;
   const weightDisplay =
-    weightValue != null && weightUnit
-      ? `${weightValue} ${weightUnit.toLowerCase()}`
-      : "No weight info";
-
-  /*const imageUrl =
-    product.images?.edges?.[0]?.node?.url ||
-    product.images?.edges?.[0]?.node?.src ||
-    null;
-  const imageAlt = product.images?.edges?.[0]?.node?.altText || product.title; */ /* Dont know what to do with this, conflict when merging*/
-  const primaryUrl = activeImage?.url || activeImage?.src || null;
-  const primaryAlt = activeImage?.altText || product.title;
+    weightValue != null && weightUnit ? `${weightValue} ${String(weightUnit).toLowerCase()}` : "No weight info";
 
   return (
     <div className="p-6">
@@ -366,9 +434,13 @@ export default function ProductDetailsPage() {
 
                 <button
                   onClick={deleteCurrentImage}
-                  className="absolute top-2 right-2 p-2 rounded bg-white/90 hover:bg-white shadow"
-                  title="Delete image"
+                  disabled={deletingImage}
+                  className={`absolute top-2 right-2 p-2 rounded bg-white/90 hover:bg-white shadow ${
+                    deletingImage ? "opacity-60 cursor-not-allowed" : ""
+                  }`}
+                  title={deletingImage ? "Deleting..." : "Delete image"}
                   type="button"
+                  aria-disabled={deletingImage}
                 >
                   <TrashIcon className="w-5 h-5 text-red-600" />
                 </button>
@@ -387,7 +459,9 @@ export default function ProductDetailsPage() {
                 <button
                   key={node.id || thumb || idx}
                   onClick={() => setActiveIdx(idx)}
-                  className={`border rounded overflow-hidden w-20 h-20 flex-shrink-0 ${idx === activeIdx ? "ring-2 ring-black" : ""}`}
+                  className={`border rounded overflow-hidden w-20 h-20 flex-shrink-0 ${
+                    idx === activeIdx ? "ring-2 ring-black" : ""
+                  }`}
                   title={`Image ${idx + 1}`}
                   type="button"
                 >
@@ -463,7 +537,11 @@ export default function ProductDetailsPage() {
               <button onClick={saveTitle} className="p-2 rounded bg-black text-white" title="Save">
                 <CheckIcon className="w-5 h-5" />
               </button>
-              <button onClick={() => { setEditingTitle(false); setDraftTitle(product.title); }} className="p-2 rounded border" title="Cancel">
+              <button
+                onClick={() => { setEditingTitle(false); setDraftTitle(product.title); }}
+                className="p-2 rounded border"
+                title="Cancel"
+              >
                 <XMarkIcon className="w-5 h-5" />
               </button>
             </div>
@@ -487,7 +565,11 @@ export default function ProductDetailsPage() {
 
             {!editingDesc ? (
               <div className="prose max-w-none">
-                {currentDesc ? <div dangerouslySetInnerHTML={{ __html: currentDesc }} /> : <p className="text-gray-700">No description</p>}
+                {currentDesc ? (
+                  <div dangerouslySetInnerHTML={{ __html: currentDesc }} />
+                ) : (
+                  <p className="text-gray-700">No description</p>
+                )}
               </div>
             ) : (
               <div className="flex items-start gap-2">
@@ -502,7 +584,11 @@ export default function ProductDetailsPage() {
                   <button onClick={saveDescription} className="p-2 rounded bg-black text-white" title="Save">
                     <CheckIcon className="w-5 h-5" />
                   </button>
-                  <button onClick={() => { setEditingDesc(false); setDraftDesc(currentDesc); }} className="p-2 rounded border" title="Cancel">
+                  <button
+                    onClick={() => { setEditingDesc(false); setDraftDesc(currentDesc); }}
+                    className="p-2 rounded border"
+                    title="Cancel"
+                  >
                     <XMarkIcon className="w-5 h-5" />
                   </button>
                 </div>
@@ -514,120 +600,175 @@ export default function ProductDetailsPage() {
           <div className="p-4 border rounded">
             <h3 className="text-xl font-semibold mb-4">Customisation Options</h3>
 
-            <div className="flex flex-col gap-2 mb-4">
-              <label className="inline-flex items-center gap-2">
-                <span>Custom Image</span>
-                <input
-                  type="checkbox"
-                  className="w-5 h-5"
-                  checked={customImage}
-                  onChange={(e) => setCustomImage(e.target.checked)}
-                />
-                  {customImage && (
-                    <div>
-                    <span style={{ marginLeft: '8px' }}>Extra Price</span>
-                    <input 
-                        type="text"
-                        placeholder="Enter a price."
-                        value={customImagePrice}
-                        onChange={(e) => setCustomImagePrice(e.target.value)}
-                        style={{ marginLeft: '6px' }}
+            <div className="flex flex-col gap-3 mb-4">
+              <div className="flex items-center gap-3">
+                <label className="inline-flex items-center gap-2">
+                  <span>Custom Image</span>
+                  <input
+                    type="checkbox"
+                    className="w-5 h-5"
+                    checked={customImage}
+                    onChange={(e) => setCustomImage(e.target.checked)}
+                  />
+                </label>
+                {customImage && (
+                  <label className="inline-flex items-center gap-2">
+                    <span>Extra Price</span>
+                    <input
+                      type="text"
+                      className="border rounded px-2 py-1 w-28"
+                      placeholder="e.g. 5.00"
+                      value={customImagePrice}
+                      onChange={(e) => setCustomImagePrice(e.target.value)}
                     />
-                    </div>
+                  </label>
                 )}
-                {/* Custom Image Price Variable (only if Custom Image = yes) (TO ADD) */}
-              </label>
-              <p className="text-sm text-gray-500">Weight: {weightDisplay}</p>
-              <label className="inline-flex items-center gap-2">
-                <span>Custom Text</span>
-                <input
-                  type="checkbox"
-                  className="w-5 h-5"
-                  checked={customText}
-                  onChange={(e) => setCustomText(e.target.checked)}
-                />
-                  {customText && (
-                    <div>
-                    <span style={{ marginLeft: '8px' }}>Extra Price</span>
-                    <input 
-                        type="text"
-                        placeholder="Enter a price."
-                        value={customTextPrice}
-                        onChange={(e) => setCustomTextPrice(e.target.value)}
-                        style={{ marginLeft: '6px' }}
-                    />
-                    </div>
-                )}
-                {/* Custom Text Price Variable (only if Custom Image = yes) (TO ADD) */}
-              </label>
+              </div>
 
-              <label className="inline-flex items-center gap-2">
-                <span>Custom Colour</span>
-                <input
-                  type="checkbox"
-                  className="w-5 h-5"
-                  checked={customColours}
-                  onChange={(e) => setCustomColours(e.target.checked)}
-               />
-                {customColours && (
-                    <div>
-                    <span style={{ marginLeft: '8px' }}>Extra Price</span>
-                    <input 
-                        type="text"
-                        placeholder="Enter a price."
-                        value={customColoursPrice}
-                        onChange={(e) => setCustomColoursPrice(e.target.value)}
-                        style={{ marginLeft: '6px' }}
+              <div className="flex items-center gap-3">
+                <label className="inline-flex items-center gap-2">
+                  <span>Custom Text</span>
+                  <input
+                    type="checkbox"
+                    className="w-5 h-5"
+                    checked={customText}
+                    onChange={(e) => setCustomText(e.target.checked)}
+                  />
+                </label>
+                {customText && (
+                  <label className="inline-flex items-center gap-2">
+                    <span>Extra Price</span>
+                    <input
+                      type="text"
+                      className="border rounded px-2 py-1 w-28"
+                      placeholder="e.g. 3.00"
+                      value={customTextPrice}
+                      onChange={(e) => setCustomTextPrice(e.target.value)}
                     />
-                    </div>
+                  </label>
                 )}
-                {/* Custom Colour Price Variable (only if Custom Image = yes) (TO ADD) */}
-              </label>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <label className="inline-flex items-center gap-2">
+                  <span>Custom Colour</span>
+                  <input
+                    type="checkbox"
+                    className="w-5 h-5"
+                    checked={customColours}
+                    onChange={(e) => setCustomColours(e.target.checked)}
+                  />
+                </label>
+                {customColours && (
+                  <label className="inline-flex items-center gap-2">
+                    <span>Extra Price</span>
+                    <input
+                      type="text"
+                      className="border rounded px-2 py-1 w-28"
+                      placeholder="e.g. 2.00"
+                      value={customColoursPrice}
+                      onChange={(e) => setCustomColoursPrice(e.target.value)}
+                    />
+                  </label>
+                )}
+              </div>
+
+              <p className="text-sm text-gray-500">Weight: {weightDisplay}</p>
             </div>
 
             {customColours && (
-              <div className="mb-3">
-                <div className="inline-flex items-center gap-2 mb-2">
-                  <span className="font-medium">Colours Available</span>
-                  <button onClick={pickColour} className="p-1 rounded hover:bg-gray-100" title="Pick colour" type="button">
-                    <EyeDropperIcon className="w-5 h-5 text-gray-700" />
-                  </button>
-                  <button
-                    onClick={() => setColours((prev) => [...prev, "#000000"])}
-                    className="p-1 rounded hover:bg-gray-100"
-                    title="Add colour"
-                    type="button"
-                  >
-                    <PlusIcon className="w-5 h-5 text-gray-700" />
-                  </button>
+              <>
+                {/* Colours list editor */}
+                <div className="mb-3">
+                  <div className="inline-flex items-center gap-2 mb-2">
+                    <span className="font-medium">Colours Available</span>
+                    <button onClick={pickColour} className="p-1 rounded hover:bg-gray-100" title="Pick colour" type="button">
+                      <EyeDropperIcon className="w-5 h-5 text-gray-700" />
+                    </button>
+                    <button
+                      onClick={() => setColours((prev) => [...prev, "#000000"])}
+                      className="p-1 rounded hover:bg-gray-100"
+                      title="Add colour"
+                      type="button"
+                    >
+                      <PlusIcon className="w-5 h-5 text-gray-700" />
+                    </button>
+                  </div>
+
+                  {colours.length === 0 ? (
+                    <p className="text-sm text-gray-500">No colours yet.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-3">
+                      {colours.map((hex, idx) => (
+                        <div key={`${hex}-${idx}`} className="flex items-center gap-2">
+                          <div
+                            className="w-8 h-8 rounded border cursor-pointer"
+                            style={{ backgroundColor: hex }}
+                            title={`${hex} — click to remove`}
+                            onClick={() => {
+                              setColours((prev) => prev.filter((_, i) => i !== idx));
+                              if (selectedColour === hex) setSelectedColour(null);
+                            }}
+                          />
+                          <input
+                            type="text"
+                            value={hex}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setColours((prev) => prev.map((c, i) => (i === idx ? v : c)));
+                            }}
+                            className="w-28 px-2 py-1 border rounded text-sm"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
-                {colours.length === 0 ? (
-                  <p className="text-sm text-gray-500">No colours yet.</p>
-                ) : (
-                  <div className="flex flex-wrap gap-3">
-                    {colours.map((hex, idx) => (
-                      <div key={`${hex}-${idx}`} className="flex items-center gap-2">
-                        <div
-                          className="w-8 h-8 rounded border cursor-pointer"
+                {/* Select active colour */}
+                {colours.length > 0 && (
+                  <div className="mb-3">
+                    <div className="font-medium mb-1">Select Colour</div>
+                    <div className="flex flex-wrap gap-2">
+                      {colours.map((hex) => (
+                        <button
+                          key={hex}
+                          type="button"
+                          onClick={() => setSelectedColour(hex)}
+                          className={`w-8 h-8 rounded-full border ${selectedColour === hex ? "ring-2 ring-black" : ""}`}
+                          title={`Use ${hex}`}
                           style={{ backgroundColor: hex }}
-                          title={`${hex} — click to remove`}
-                          onClick={() => setColours((prev) => prev.filter((_, i) => i !== idx))}
                         />
-                        <input
-                          type="text"
-                          value={hex}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            setColours((prev) => prev.map((c, i) => (i === idx ? v : c)));
-                          }}
-                          className="w-28 px-2 py-1 border rounded text-sm"
-                        />
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 )}
-              </div>
+
+                {/* Compact front/back preview for the selected colour */}
+                {selectedColour && (
+                  <div className="mt-4 p-3 border rounded">
+                    <div className="inline-flex gap-3">
+                      {(["front", "back"] as const).map((side) => {
+                        const imgId = colourImageMap[selectedColour!]?.[side] ?? null;
+                        const node = getImageById(imgId);
+                        const src = node?.url || node?.src || "";
+                        return (
+                          <div key={side} className="border rounded p-2">
+                            <div className="text-xs text-gray-500 mb-1 capitalize">{side}</div>
+                            <div className="w-32 h-32 bg-gray-100 rounded overflow-hidden flex items-center justify-center">
+                              {src ? (
+                                <img src={src} alt={`${side} preview`} className="w-full h-full object-contain" />
+                              ) : (
+                                <span className="text-gray-400 text-xs">Blank</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
 
             <div className="mt-4">
