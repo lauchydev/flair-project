@@ -99,6 +99,10 @@ export default function ProductDetailsPage() {
   const [draftWeight, setDraftWeight] = useState("");
   const [draftPrice, setDraftPrice] = useState("");
 
+    // Price inline edit states
+    const [editingPrice, setEditingPrice] = useState(false);
+    const [draftPrice, setDraftPrice] = useState("");
+
   // Metafields UI
   const [customImage, setCustomImage] = useState(false);
   const [customText, setCustomText] = useState(false);
