@@ -9,8 +9,24 @@ function safeParse(txt: string) {
 
 function formatDecimal(value: any): string {
   const number = parseFloat(value);
-  if (isNaN(number)) return "0.0";
+  if (isNaN(number)) return "0.00";
   return number.toFixed(2);
+}
+
+type DesignArea = { x: number; y: number; width: number; height: number } | null;
+
+function sanitiseDesignArea(input: any): DesignArea {
+  if (!input && input !== 0) return null;
+  // allow explicit null to clear
+  if (input === null) return null;
+  const n = (v: any) => Number.isFinite(+v) ? Math.max(0, Math.floor(+v)) : 0;
+  const x = n(input.x);
+  const y = n(input.y);
+  const width = n(input.width);
+  const height = n(input.height);
+  // zero-width/height rectangles are allowed to represent "unset"? We'll clamp to at least 1 if you prefer.
+  if (width <= 0 || height <= 0) return null; // treat empty as cleared
+  return { x, y, width, height };
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -18,7 +34,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   if (!ADMIN_TOKEN) return res.status(500).json({ error: "Missing SHOPIFY_ADMIN_TOKEN env var" });
 
-    const { id, customImage, customText, customColours, colours, customImagePrice, customTextPrice, customColoursPrice} = req.body as {
+  const {
+    id,
+    customImage,
+    customText,
+    customColours,
+    colours,
+    customImagePrice,
+    customTextPrice,
+    customColoursPrice,
+    designArea, // NEW
+  } = req.body as {
     id?: string;
     customImage?: boolean;
     customText?: boolean;
@@ -27,6 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     customImagePrice?: string;
     customTextPrice?: string;
     customColoursPrice?: string;
+    designArea?: any; // validate below
   };
 
   if (!id) return res.status(400).json({ error: "Missing product id" });
@@ -37,6 +64,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .map(String)
       .map(v => v.trim())
       .filter(v => /^#([0-9A-Fa-f]{6})$/.test(v));
+
+  // Sanitise design area (object with x,y,w,h) or null
+  const cleanDesignArea: DesignArea = sanitiseDesignArea(designArea);
 
   // 1) Read current metafields to learn their types (if they exist)
   const getQuery = `
@@ -49,6 +79,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         cipv: metafield(namespace: "custom", key: "custom_image_price_variable") { type }
         ctpv: metafield(namespace: "custom", key: "custom_text_price_variable") { type }
         ccpv: metafield(namespace: "custom", key: "colour_customisation_price_variable") { type }
+        da: metafield(namespace: "custom", key: "design_area") { type }  # NEW
       }
     }
   `;
@@ -70,7 +101,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const current = (getJson as any)?.data?.product ?? {};
 
     // 2) Build inputs (ALWAYS provide ownerId, namespace, key, type, value)
-    const inputs = [
+    const inputs: Array<{
+      ownerId: string;
+      namespace: string;
+      key: string;
+      type: string;
+      value: string;
+    }> = [
       {
         ownerId: id,
         namespace: "custom",
@@ -96,7 +133,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         ownerId: id,
         namespace: "custom",
         key: "colours_available",
-        type: current.ca?.type || "list.color", 
+        type: current.ca?.type || "list.color",
         value: JSON.stringify(cleanColours),
       },
       {
@@ -121,6 +158,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         value: formatDecimal(customColoursPrice),
       },
     ];
+
+    // NEW: design area metafield (json). If cleared, store JSON null.
+    inputs.push({
+      ownerId: id,
+      namespace: "custom",
+      key: "design_area",
+      type: current.da?.type || "json",
+      value: JSON.stringify(cleanDesignArea ?? null),
+    });
 
     const setMutation = `
       mutation setMetafields($metafields: [MetafieldsSetInput!]!) {
