@@ -90,16 +90,13 @@ export default function ProductDetailsPage() {
   const [editingStock, setEditingStock] = useState(false);
   const [editingWeight, setEditingWeight] = useState(false);
   const [editingProductOwner, setEditingProductOwner] = useState(false);
+  const [editingPrice, setEditingPrice] = useState(false);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftDesc, setDraftDesc] = useState("");
   const [draftSku, setDraftSku] = useState("");
   const [draftBarcode, setDraftBarcode] = useState("");
   const [draftStock, setDraftStock] = useState("");
   const [draftWeight, setDraftWeight] = useState("");
-
-
-  // Price inline edit states
-  const [editingPrice, setEditingPrice] = useState(false);
   const [draftPrice, setDraftPrice] = useState("");
 
   // Metafields UI
@@ -110,8 +107,6 @@ export default function ProductDetailsPage() {
   const [customTextPrice, setCustomTextPrice] = useState("0");
   const [customColoursPrice, setCustomColoursPrice] = useState("0");
   const [productOwner, setProductOwner] = useState("");
-
-
 
   // Colours + mapping
   const [colours, setColours] = useState<string[]>([]); // #RRGGBB
@@ -135,6 +130,8 @@ export default function ProductDetailsPage() {
 
   //temp designer emails
   const designeremails = ["designer1@example.com", "designer2@example.com", "test@example.com"];
+  const currentUser = "designer2@example.com";
+  const currentUserRole = "admin";
 
   const currentDesc = useMemo(() => {
     if (!product) return "";
@@ -260,7 +257,7 @@ export default function ProductDetailsPage() {
     });
   }, [colours, images]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Save title/description/price
+  // --- Save title/description/price
   async function savePrice() {
     if (!product) return;
     const variantId = product.variants?.edges?.[0]?.node?.id;
@@ -752,8 +749,54 @@ export default function ProductDetailsPage() {
                 <XMarkIcon className="w-5 h-5" />
               </button>
             </div>
-          )}
-            {/* Price with pencil (like description) */}
+          {/* Description with pencil */}
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-2">
+              <h2 className="text-lg font-semibold">Description</h2>
+              {!editingDesc && (
+                <button
+                  onClick={() => {
+                    setDraftDesc(currentDesc);
+                    setEditingDesc(true);
+                  }}
+                  className="p-1 rounded hover:bg-gray-100"
+                  title="Edit description"
+                  type="button"
+                >
+                  <PencilSquareIcon className="w-5 h-5 text-gray-700" />
+                </button>
+              )}
+            </div>
+
+            {!editingDesc ? (
+              <div className="prose max-w-none">
+                {currentDesc ? (
+                  <div dangerouslySetInnerHTML={{ __html: currentDesc }} />
+                ) : (
+                  <p className="text-gray-700">No description</p>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-start gap-2">
+                <textarea
+                  ref={descTextareaRef}
+                  className="w-full min-h-[180px] p-3 border rounded"
+                  value={draftDesc}
+                  onChange={(e) => setDraftDesc(e.target.value)}
+                  placeholder="Enter product description (HTML allowed)"
+                />
+                <div className="flex flex-col gap-2">
+                  <button onClick={saveDescription} className="p-2 rounded bg-black text-white" title="Save">
+                    <CheckIcon className="w-5 h-5" />
+                  </button>
+                  <button onClick={() => { setEditingDesc(false); setDraftDesc(currentDesc); }} className="p-2 rounded border" title="Cancel">
+                    <XMarkIcon className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+            {/* Price with pencil */}
             <div className="mb-6">
               <div className="flex items-center gap-2 mb-2">
                 <h2 className="text-lg font-semibold">Price</h2>
@@ -804,54 +847,6 @@ export default function ProductDetailsPage() {
                 </div>
               )}
             </div>
-          {/* Description with pencil */}
-          <div className="mb-6">
-            <div className="flex items-center gap-2 mb-2">
-              <h2 className="text-lg font-semibold">Description</h2>
-              {!editingDesc && (
-                <button
-                  onClick={() => {
-                    setDraftDesc(currentDesc);
-                    setEditingDesc(true);
-                  }}
-                  className="p-1 rounded hover:bg-gray-100"
-                  title="Edit description"
-                  type="button"
-                >
-                  <PencilSquareIcon className="w-5 h-5 text-gray-700" />
-                </button>
-              )}
-            </div>
-
-            {!editingDesc ? (
-              <div className="prose max-w-none">
-                {currentDesc ? (
-                  <div dangerouslySetInnerHTML={{ __html: currentDesc }} />
-                ) : (
-                  <p className="text-gray-700">No description</p>
-                )}
-              </div>
-            ) : (
-              <div className="flex items-start gap-2">
-                <textarea
-                  ref={descTextareaRef}
-                  className="w-full min-h-[180px] p-3 border rounded"
-                  value={draftDesc}
-                  onChange={(e) => setDraftDesc(e.target.value)}
-                  placeholder="Enter product description (HTML allowed)"
-                />
-                <div className="flex flex-col gap-2">
-                  <button onClick={saveDescription} className="p-2 rounded bg-black text-white" title="Save">
-                    <CheckIcon className="w-5 h-5" />
-                  </button>
-                  <button onClick={() => { setEditingDesc(false); setDraftDesc(currentDesc); }} className="p-2 rounded border" title="Cancel">
-                    <XMarkIcon className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
           {/* Customisation Options (metafields) */}
           <div className="p-4 border rounded">
             <h3 className="text-xl font-semibold mb-4">Customisation Options</h3>
@@ -1036,7 +1031,6 @@ export default function ProductDetailsPage() {
               <ul className="space-y-1">
                 {product.variants.edges.map(({ node }) => (
                   <li key={node.id} className="text-sm text-gray-600">
-                    {node.title} — ${node.price}
                     <div className="mb-2">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold">SKU:</span>
@@ -1180,7 +1174,7 @@ export default function ProductDetailsPage() {
                             </button>
                           </>
                         )}
-                        {!editingProductOwner && (
+                        {!editingProductOwner && currentUserRole === "admin" &&  (
                           <button
                             onClick={() => {
                               setEditingProductOwner(true);
