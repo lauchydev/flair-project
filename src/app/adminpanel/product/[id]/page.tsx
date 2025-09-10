@@ -753,7 +753,54 @@ export default function ProductDetailsPage() {
               </button>
             </div>
           )}
-            {/* Price with pencil (like description) */}
+          {/* Description with pencil */}
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-2">
+              <h2 className="text-lg font-semibold">Description</h2>
+              {!editingDesc && (
+                <button
+                  onClick={() => {
+                    setDraftDesc(currentDesc);
+                    setEditingDesc(true);
+                  }}
+                  className="p-1 rounded hover:bg-gray-100"
+                  title="Edit description"
+                  type="button"
+                >
+                  <PencilSquareIcon className="w-5 h-5 text-gray-700" />
+                </button>
+              )}
+            </div>
+
+            {!editingDesc ? (
+              <div className="prose max-w-none">
+                {currentDesc ? (
+                  <div dangerouslySetInnerHTML={{ __html: currentDesc }} />
+                ) : (
+                  <p className="text-gray-700">No description</p>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-start gap-2">
+                <textarea
+                  ref={descTextareaRef}
+                  className="w-full min-h-[180px] p-3 border rounded"
+                  value={draftDesc}
+                  onChange={(e) => setDraftDesc(e.target.value)}
+                  placeholder="Enter product description (HTML allowed)"
+                />
+                <div className="flex flex-col gap-2">
+                  <button onClick={saveDescription} className="p-2 rounded bg-black text-white" title="Save">
+                    <CheckIcon className="w-5 h-5" />
+                  </button>
+                  <button onClick={() => { setEditingDesc(false); setDraftDesc(currentDesc); }} className="p-2 rounded border" title="Cancel">
+                    <XMarkIcon className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+            {/* Price with pencil */}
             <div className="mb-6">
               <div className="flex items-center gap-2 mb-2">
                 <h2 className="text-lg font-semibold">Price</h2>
