@@ -19,6 +19,7 @@ import QuantityStepper from "./controls/QuantityStepper";
 import PreviewCanvas from "./PreviewCanvas";
 import { useVariantOptions } from "./hooks/useVariantOptions";
 import { usePriceDisplay } from "./hooks/usePriceDisplay";
+import TextStyle from "./controls/TextStyle";
 
 interface ProductCustomizerProps {
     product: ShopifyProduct;
@@ -40,12 +41,30 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
             uploadedImage: null,
             textPos: { x: 50, y: 85 },
             imagePos: { x: 85, y: 15 },
+            textColor: "#000000",
+            textFont:
+                "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+            textWidthPercent: 40,
+            textHeightPercent: 12,
+            textAngleDeg: 0,
+            imageWidthPercent: 20,
+            imageHeightPercent: 20,
+            imageAngleDeg: 0,
         },
         back: {
             text: "",
             uploadedImage: null,
             textPos: { x: 50, y: 85 },
             imagePos: { x: 85, y: 15 },
+            textColor: "#000000",
+            textFont:
+                "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+            textWidthPercent: 40,
+            textHeightPercent: 12,
+            textAngleDeg: 0,
+            imageWidthPercent: 20,
+            imageHeightPercent: 20,
+            imageAngleDeg: 0,
         },
     });
 
@@ -67,6 +86,18 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
     const currentViewCustomization = viewCustomizations[selectedView];
     const uploadedImage = currentViewCustomization.uploadedImage;
     const customText = currentViewCustomization.text;
+    const textColor = currentViewCustomization.textColor as string;
+    const textFont = currentViewCustomization.textFont as string;
+    const textWidthPercent =
+        currentViewCustomization.textWidthPercent as number;
+    const textHeightPercent =
+        currentViewCustomization.textHeightPercent as number;
+    const textAngleDeg = currentViewCustomization.textAngleDeg as number;
+    const imageWidthPercent =
+        currentViewCustomization.imageWidthPercent as number;
+    const imageHeightPercent =
+        currentViewCustomization.imageHeightPercent as number;
+    const imageAngleDeg = currentViewCustomization.imageAngleDeg as number;
 
     // Feature flags from product metafields
     const enableCustomColor = parseMetafieldBoolean(product.customColor?.value);
@@ -219,6 +250,32 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                             />
                         )}
 
+                        {/* Text style (font + color) */}
+                        {enableCustomText && (
+                            <TextStyle
+                                fontFamily={textFont}
+                                colorHex={textColor}
+                                onFontChange={(font) =>
+                                    setViewCustomizations((prev) => ({
+                                        ...prev,
+                                        [selectedView]: {
+                                            ...prev[selectedView],
+                                            textFont: font,
+                                        },
+                                    }))
+                                }
+                                onColorChange={(hex) =>
+                                    setViewCustomizations((prev) => ({
+                                        ...prev,
+                                        [selectedView]: {
+                                            ...prev[selectedView],
+                                            textColor: hex,
+                                        },
+                                    }))
+                                }
+                            />
+                        )}
+
                         {/* Price + Actions bar */}
                         <section>
                             <div className="flex items-center gap-3 rounded-2xl border-4 border-black bg-white px-3 py-3 shadow-xl">
@@ -314,6 +371,38 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                                                 },
                                             }))
                                         }
+                                        textColor={textColor}
+                                        textFont={textFont}
+                                        textWidthPercent={textWidthPercent}
+                                        onTextWidthPercentChange={(w) =>
+                                            setViewCustomizations((prev) => ({
+                                                ...prev,
+                                                [selectedView]: {
+                                                    ...prev[selectedView],
+                                                    textWidthPercent: w,
+                                                },
+                                            }))
+                                        }
+                                        textHeightPercent={textHeightPercent}
+                                        onTextHeightPercentChange={(h) =>
+                                            setViewCustomizations((prev) => ({
+                                                ...prev,
+                                                [selectedView]: {
+                                                    ...prev[selectedView],
+                                                    textHeightPercent: h,
+                                                },
+                                            }))
+                                        }
+                                        textAngleDeg={textAngleDeg}
+                                        onTextAngleDegChange={(a) =>
+                                            setViewCustomizations((prev) => ({
+                                                ...prev,
+                                                [selectedView]: {
+                                                    ...prev[selectedView],
+                                                    textAngleDeg: a,
+                                                },
+                                            }))
+                                        }
                                         uploadedImageUrl={uploadedImage}
                                         imagePosition={imagePos}
                                         onImagePositionChange={(pos) =>
@@ -325,8 +414,37 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                                                 },
                                             }))
                                         }
+                                        imageWidthPercent={imageWidthPercent}
+                                        imageHeightPercent={imageHeightPercent}
+                                        imageAngleDeg={imageAngleDeg}
+                                        onImageWidthPercentChange={(w) =>
+                                            setViewCustomizations((prev) => ({
+                                                ...prev,
+                                                [selectedView]: {
+                                                    ...prev[selectedView],
+                                                    imageWidthPercent: w,
+                                                },
+                                            }))
+                                        }
+                                        onImageHeightPercentChange={(h) =>
+                                            setViewCustomizations((prev) => ({
+                                                ...prev,
+                                                [selectedView]: {
+                                                    ...prev[selectedView],
+                                                    imageHeightPercent: h,
+                                                },
+                                            }))
+                                        }
+                                        onImageAngleDegChange={(a) =>
+                                            setViewCustomizations((prev) => ({
+                                                ...prev,
+                                                [selectedView]: {
+                                                    ...prev[selectedView],
+                                                    imageAngleDeg: a,
+                                                },
+                                            }))
+                                        }
                                         showDesignArea
-                                        constrainToDesignArea
                                         designArea={defaultDesignArea}
                                     />
                                 );
