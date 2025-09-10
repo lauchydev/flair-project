@@ -1,27 +1,41 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { TrashIcon, PlusIcon } from "@heroicons/react/24/outline";
+import {
+  TrashIcon,
+  PlusIcon,
+  UserPlusIcon,
+  ArrowLeftIcon,
+  MagnifyingGlassIcon,
+  XMarkIcon,
+} from "@heroicons/react/24/outline";
 
 // If your tsconfig has "@/components" path alias, keep this import.
 // Otherwise change to a relative path like: "../../components/layout/LogoutButton"
 import LogoutButton from "@/components/layout/LogoutButton";
 
+type ImageNode = {
+  id?: string | null;
+  url?: string | null;
+  src?: string | null;
+  altText?: string | null;
+};
 
 type Product = {
   id: string;
   title?: string;
   description?: string;
-  images?: {
-    edges?: { node?: { src?: string; altText?: string } }[];
-  };
+  images?: { edges?: { node?: ImageNode }[] };
 };
 
 export default function AdminPanelPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState("");
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -33,12 +47,12 @@ export default function AdminPanelPage() {
         const res = await fetch("/api/get-products", { cache: "no-store" });
         const data = await res.json();
 
-        const list: Product[] =
-          Array.isArray(data)
-            ? data
-            : Array.isArray(data?.products)
-            ? data.products
-            : [];
+        // Be robust to either array or { products: [...] }
+        const list: Product[] = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.products)
+          ? data.products
+          : (data ?? []);
 
         if (!cancelled) setProducts(list);
       } catch (err) {
@@ -55,86 +69,201 @@ export default function AdminPanelPage() {
     };
   }, []);
 
+  // focus input when opening search
+  useEffect(() => {
+    if (isSearchOpen) {
+      const t = setTimeout(() => searchInputRef.current?.focus(), 50);
+      return () => clearTimeout(t);
+    }
+  }, [isSearchOpen]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return products;
+    return products.filter((p) => p.title?.toLowerCase().includes(q));
+  }, [products, query]);
+
+  const Grid = useMemo(() => {
+    if (loading) {
+      return (
+        <ul className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-5">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <li
+              key={`skeleton-${i}`}
+              className="rounded-xl border border-stone-200 bg-stone-50 shadow-sm overflow-hidden"
+            >
+              <div className="aspect-square animate-pulse bg-stone-200" />
+              <div className="p-2.5">
+                <div className="h-3.5 w-3/4 animate-pulse rounded bg-stone-200" />
+              </div>
+            </li>
+          ))}
+        </ul>
+      );
+    }
+
+    if (!filtered.length) {
+      return (
+        <div className="rounded-xl border border-stone-200 bg-stone-50 shadow-sm p-10 text-center">
+          <p className="text-stone-700">
+            {query ? "No matching products." : "No products yet."}
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <ul className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-5">
+        {filtered.map((product) => {
+          const imgNode = product.images?.edges?.[0]?.node;
+          const image = imgNode?.src || imgNode?.url || null;
+          const altText = imgNode?.altText || product.title || "Product";
+
+          return (
+            <li
+              key={product.id}
+              className="group relative rounded-xl border border-stone-200 bg-stone-50 shadow-sm ring-1 ring-black/5 overflow-hidden transition hover:shadow-md cursor-pointer"
+              onClick={() =>
+                router.push(`/adminpanel/product/${encodeURIComponent(product.id)}`)
+              }
+            >
+              {image ? (
+                <img
+                  src={image}
+                  alt={altText}
+                  className="aspect-square w-full object-cover transition group-hover:scale-[1.01]"
+                />
+              ) : (
+                <div className="aspect-square w-full bg-stone-200 flex items-center justify-center text-stone-400 text-xs">
+                  No Image
+                </div>
+              )}
+
+              <div className="p-2.5">
+                <h2 className="line-clamp-2 text-[13px] font-medium text-stone-900">
+                  {product.title || "Untitled"}
+                </h2>
+                {product.description ? (
+                  <p className="text-[11px] text-stone-500 line-clamp-2">
+                    {product.description}
+                  </p>
+                ) : null}
+              </div>
+
+              <button
+                className="absolute right-2 top-2 rounded-full bg-stone-50/90 p-1.5 backdrop-blur ring-1 ring-black/10 opacity-0 transition group-hover:opacity-100 hover:bg-stone-100"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  console.log("Delete product", product.id);
+                }}
+                aria-label="Delete product"
+              >
+                <TrashIcon className="h-4 w-4 text-stone-600 hover:text-rose-500" />
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }, [loading, filtered, query, router]);
+
   return (
-    <div className="p-6">
-      {/* Header row */}
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Admin Panel</h1>
+    <div className="min-h-screen bg-stone-100">
+      {/* Floating header */}
+      <div className="sticky top-0 z-20 px-4 sm:px-6 py-3">
+        <div className="relative rounded-2xl border border-stone-200 bg-stone-50/90 backdrop-blur shadow-md">
+          {/* Exit (left) */}
+          <div className="absolute left-3 top-1/2 -translate-y-1/2">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 text-stone-700 hover:text-stone-900"
+            >
+              <ArrowLeftIcon className="h-5 w-5" />
+              <span className="hidden sm:inline">Exit</span>
+            </Link>
+          </div>
 
-        <div className="flex items-center gap-3">
-          <Link
-            href="/adminpanel/product/new"
-            className="inline-flex items-center gap-2 bg-black text-white px-4 py-2 rounded hover:opacity-90"
-          >
-            <PlusIcon className="w-5 h-5" />
-            <span>Add Product</span>
-          </Link>
+          {/* Title */}
+          <div className="py-2.5 text-center">
+            <h1 className="text-lg font-semibold tracking-tight text-stone-800">
+              Admin Panel
+            </h1>
+            <p className="text-[11px] text-stone-500">Manage your products</p>
+          </div>
 
-          {/* Visible Logout button here */}
-          <LogoutButton />
+          {/* Actions (right) */}
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-4">
+            {/* Add Product */}
+            <Link
+              href="/adminpanel/product/new"
+              className="group inline-flex items-center text-stone-700 hover:text-indigo-600 transition"
+            >
+              <PlusIcon className="h-5 w-5" />
+              <span className="ml-1 max-w-0 opacity-0 transition-all duration-200 ease-out group-hover:max-w-[140px] group-hover:opacity-100 whitespace-nowrap text-sm">
+                Add Product
+              </span>
+            </Link>
+
+            {/* Add User */}
+            <button
+              type="button"
+              className="group inline-flex items-center text-stone-700 hover:text-indigo-600 transition"
+              onClick={() => console.log("Add User clicked")}
+            >
+              <UserPlusIcon className="h-5 w-5" />
+              <span className="ml-1 max-w-0 opacity-0 transition-all duration-200 ease-out group-hover:max-w-[120px] group-hover:opacity-100 whitespace-nowrap text-sm">
+                Add User
+              </span>
+            </button>
+
+            {/* Search */}
+            {!isSearchOpen ? (
+              <button
+                type="button"
+                onClick={() => setIsSearchOpen(true)}
+                className="text-stone-700 hover:text-indigo-600 transition"
+                aria-label="Search"
+              >
+                <MagnifyingGlassIcon className="h-5 w-5" />
+              </button>
+            ) : (
+              <div className="flex items-center border-b border-stone-300">
+                <MagnifyingGlassIcon className="h-5 w-5 text-stone-500" />
+                <input
+                  ref={searchInputRef}
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search..."
+                  className="ml-2 bg-transparent outline-none placeholder-stone-400 text-sm w-40 sm:w-56"
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      setIsSearchOpen(false);
+                      setQuery("");
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSearchOpen(false);
+                    setQuery("");
+                  }}
+                  className="ml-1 text-stone-500 hover:text-stone-700"
+                  aria-label="Close search"
+                >
+                  <XMarkIcon className="h-5 w-5" />
+                </button>
+              </div>
+            )}
+
+            {/* Visible Logout button */}
+            <LogoutButton />
+          </div>
         </div>
       </div>
 
-      {loading ? (
-        <p>Loading...</p>
-      ) : products.length > 0 ? (
-        <ul className="space-y-4">
-          {products.map((product) => {
-            const image = product?.images?.edges?.[0]?.node?.src || null;
-            const altText =
-              product?.images?.edges?.[0]?.node?.altText ||
-              product?.title ||
-              "Product";
-
-            return (
-              <li
-                key={product.id}
-                className="p-4 border rounded flex items-center justify-between hover:bg-gray-50 transition cursor-pointer"
-                onClick={() =>
-                  router.push(
-                    `/adminpanel/product/${encodeURIComponent(product.id)}`
-                  )
-                }
-              >
-                {/* Left: image + details */}
-                <div className="flex items-center gap-4">
-                  {image ? (
-                    <img
-                      src={image}
-                      alt={altText}
-                      className="w-16 h-16 object-cover rounded"
-                    />
-                  ) : (
-                    <div className="w-16 h-16 bg-gray-200 rounded flex items-center justify-center text-gray-500">
-                      No Image
-                    </div>
-                  )}
-
-                  <div>
-                    <h2 className="font-semibold">{product.title || "Untitled"}</h2>
-                    <p className="text-sm text-gray-600">
-                      {product.description || "No description"}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Right: placeholder delete (no-op) */}
-                <button
-                  className="p-2 text-gray-500 hover:text-red-500 transition"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    console.log("Delete product", product.id);
-                  }}
-                >
-                  <TrashIcon className="w-5 h-5" />
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      ) : (
-        <p className="text-gray-600">No products found.</p>
-      )}
+      {/* Content */}
+      <div className="px-4 sm:px-6 pb-10">{Grid}</div>
     </div>
   );
 }
