@@ -12,7 +12,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   if (!ADMIN_TOKEN) return res.status(500).json({ error: "Missing SHOPIFY_ADMIN_TOKEN env var" });
 
-  const { id, variantId, title, descriptionHtml, sku, barcode, inventoryQuantity, weight } = req.body as {
+  const { id, variantId, title, descriptionHtml, sku, barcode, inventoryQuantity, weight, price } = req.body as {
     id?: string;
     variantId?: string;
     title?: string;
@@ -21,15 +21,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     barcode?: string;
     inventoryQuantity?: string | number;
     weight?: string;
+    price?: string;
   };
 
   if (!id) return res.status(400).json({ error: "Missing product id" });
-  if (title == null && descriptionHtml == null && sku == null && barcode == null && inventoryQuantity == null && weight == null) {
+  if (title == null && descriptionHtml == null && sku == null && barcode == null && inventoryQuantity == null && weight == null && price == null) {
     return res.status(400).json({ error: "Nothing to update" });
   }
 
   // If updating variant fields, use REST Admin API
-  if (sku != null || barcode != null || inventoryQuantity != null || weight != null) {
+  if (sku != null || barcode != null || inventoryQuantity != null || weight != null || price != null) {
     let targetVariantId = variantId;
     if (!targetVariantId) {
       // Fetch the product to get the first variant ID
@@ -56,8 +57,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const [value, unit] = weight.split(" ");
       payload.variant.weight = Number(value);
     }
+    if (typeof price === "string") {
+      payload.variant.price = price;
+    }
 
-    // Update the variant (SKU, barcode, weight)
+    // Update the variant (SKU, barcode, weight, price)
     let updateResp = await fetch(`${ADMIN_API.replace('/graphql.json', '')}/variants/${targetVariantId}.json`, {
       method: "PUT",
       headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": ADMIN_TOKEN },

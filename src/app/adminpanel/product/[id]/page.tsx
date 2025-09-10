@@ -97,7 +97,12 @@ export default function ProductDetailsPage() {
   const [draftStock, setDraftStock] = useState("");
   const [draftWeight, setDraftWeight] = useState("");
 
-  // Metafields toggles + prices
+
+  // Price inline edit states
+  const [editingPrice, setEditingPrice] = useState(false);
+  const [draftPrice, setDraftPrice] = useState("");
+
+  // Metafields UI
   const [customImage, setCustomImage] = useState(false);
   const [customText, setCustomText] = useState(false);
   const [customColours, setCustomColours] = useState(false);
@@ -221,7 +226,7 @@ export default function ProductDetailsPage() {
     (async () => {
       try {
         await loadProduct();
-      } catch {
+        } catch {
         alert("Failed to load product");
       } finally {
         setLoading(false);
@@ -229,7 +234,7 @@ export default function ProductDetailsPage() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productId]);
-
+  
   // Auto-focus when entering edit
   useEffect(() => {
     if (editingTitle) titleInputRef.current?.focus();
@@ -237,7 +242,7 @@ export default function ProductDetailsPage() {
   useEffect(() => {
     if (editingDesc) descTextareaRef.current?.focus();
   }, [editingDesc]);
-
+  
   // Whenever colours or images change, recompute a sequential map IF we don't already have ids for the colour
   useEffect(() => {
     if (!colours.length) { setColourImageMap({}); return; }
@@ -255,7 +260,30 @@ export default function ProductDetailsPage() {
     });
   }, [colours, images]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Save title/description
+  // Save title/description/price
+  async function savePrice() {
+    if (!product) return;
+    const variantId = product.variants?.edges?.[0]?.node?.id;
+    try {
+      const res = await fetch("/api/update-product", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: productId, variantId, price: draftPrice }),
+      });
+      const text = await res.text();
+      let json: any;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = { parseError: true, body: text };
+      }
+      if (!res.ok) return alert(json?.error || "Failed to update price");
+      await loadProduct();
+      setEditingPrice(false);
+    } catch (e: any) {
+      alert(`Network error: ${e?.message || e}`);
+    }
+  }
   async function saveTitle() {
     if (!product) return;
     try {
@@ -725,6 +753,57 @@ export default function ProductDetailsPage() {
               </button>
             </div>
           )}
+            {/* Price with pencil (like description) */}
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-2">
+                <h2 className="text-lg font-semibold">Price</h2>
+                {!editingPrice && (
+                  <button
+                    onClick={() => {
+                      setDraftPrice(product.variants?.edges?.[0]?.node?.price ?? "");
+                      setEditingPrice(true);
+                    }}
+                    className="p-1 rounded hover:bg-gray-100"
+                    title="Edit price"
+                    type="button"
+                  >
+                    <PencilSquareIcon className="w-5 h-5 text-gray-700" />
+                  </button>
+                )}
+              </div>
+
+              {!editingPrice ? (
+                <div className="prose max-w-none">
+                  <span className="text-gray-700">${product.variants?.edges?.[0]?.node?.price ?? "No price"}</span>
+                </div>
+              ) : (
+                <div className="flex items-start gap-2">
+                  <input
+                    type="number"
+                    className="w-full p-3 border rounded"
+                    value={draftPrice}
+                    onChange={(e) => setDraftPrice(e.target.value)}
+                    placeholder="Enter product price"
+                    min="0"
+                  />
+                  <div className="flex flex-col gap-2">
+                    <button onClick={savePrice} className="p-2 rounded bg-black text-white" title="Save">
+                      <CheckIcon className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingPrice(false);
+                        setDraftPrice(product.variants?.edges?.[0]?.node?.price ?? "");
+                      }}
+                      className="p-2 rounded border"
+                      title="Cancel"
+                    >
+                      <XMarkIcon className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           {/* Description with pencil */}
           <div className="mb-6">
             <div className="flex items-center gap-2 mb-2">
