@@ -590,7 +590,10 @@ export default function ProductDetailsPage() {
   const firstVariant = product.variants?.edges?.[0]?.node;
   const weightValue = firstVariant?.inventoryItem?.measurement?.weight?.value;
   const weightUnit  = firstVariant?.inventoryItem?.measurement?.weight?.unit;
-  const weightDisplay = weightValue != null && weightUnit ? `${weightValue} ${String(weightUnit).toLowerCase()}` : "No weight inf
+  const weightDisplay = weightValue != null && weightUnit ? `${weightValue} ${String(weightUnit).toLowerCase()}` : "No weight info";
+  const skuDisplay = firstVariant?.sku ?? "No SKU info";
+  const barcodeDisplay = firstVariant?.barcode ?? "No barcode info";
+  const stockDisplay = firstVariant?.inventoryQuantity ?? "No stock info";
 
   return (
     <div className="p-6">
@@ -749,6 +752,7 @@ export default function ProductDetailsPage() {
                 <XMarkIcon className="w-5 h-5" />
               </button>
             </div>
+          )}
           {/* Description with pencil */}
           <div className="mb-6">
             <div className="flex items-center gap-2 mb-2">
