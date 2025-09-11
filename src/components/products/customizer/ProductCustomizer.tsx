@@ -304,9 +304,6 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
         imagePrice,
     });
 
-    // Variant selection logic
-    // isOptionAvailable now comes from the hook
-
     // Auto-center on add (when transitioning from empty to present)
     const prevTextPresentRef = useRef<{ front: boolean; back: boolean }>({
         front: false,
@@ -398,7 +395,7 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                                 activeIndex={
                                     currentViewCustomization.activeImageIndex
                                 }
-                                onAdd={(urls) =>
+                                onAdd={(urls: string[]) =>
                                     setViewCustomizations((prev) => {
                                         const view = prev[selectedView];
                                         const existing =
@@ -406,7 +403,7 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                                         const combined = [...existing, ...urls];
                                         const newOverlays = [
                                             ...(view.imageOverlays ?? []),
-                                            ...urls.map((u) => ({
+                                            ...urls.map((u: string) => ({
                                                 url: u,
                                                 x: areaCenter.x,
                                                 y: areaCenter.y,
@@ -435,7 +432,7 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                                         };
                                     })
                                 }
-                                onRemove={(index) =>
+                                onRemove={(index: number) =>
                                     setViewCustomizations((prev) => {
                                         const view = prev[selectedView];
                                         const imgs = [
@@ -472,7 +469,7 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                                         };
                                     })
                                 }
-                                onMakeActive={(index) =>
+                                onMakeActive={(index: number) =>
                                     setViewCustomizations((prev) => {
                                         const view = prev[selectedView];
                                         const imgs = view.uploadedImages ?? [];

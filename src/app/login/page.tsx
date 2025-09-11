@@ -9,18 +9,32 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
 
-    // Dummy credentials
-    const dummyEmail = 'test@example.com';
-    const dummyPassword = 'password123';
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
 
-    if (email === dummyEmail && password === dummyPassword) {
-      localStorage.setItem('isLoggedIn', 'true'); // Save login state
-      router.push('/adminpanel'); // Redirect to customisation page
-    } else {
-      setError('Invalid email or password');
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok) {
+        if (data.role === 'admin') {
+          router.push('/adminpanel');
+        } else {
+          // ensure customer record exists
+          await fetch('/api/customers/init', { method: 'POST' }).catch(() => {});
+          router.push('/products');
+        }
+      } else {
+        setError(data.error || 'Invalid email or password');
+      }
+    } catch (err) {
+      setError('Something went wrong. Please try again.');
     }
   };
 
@@ -61,3 +75,4 @@ export default function LoginPage() {
     </div>
   );
 }
+

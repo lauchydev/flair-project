@@ -67,7 +67,6 @@ interface PreviewCanvasProps {
 
     designArea?: PercentRect; // e.g. { x: 20, y: 8, width: 60, height: 70 }
     showDesignArea?: boolean; // dashed overlay toggle
-    // constrainToDesignArea?: boolean; // unused now
 }
 
 export default function PreviewCanvas({
