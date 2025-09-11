@@ -502,18 +502,6 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                                         };
                                     })
                                 }
-                                onClearAll={() =>
-                                    setViewCustomizations((prev) => ({
-                                        ...prev,
-                                        [selectedView]: {
-                                            ...prev[selectedView],
-                                            uploadedImages: [],
-                                            imageOverlays: [],
-                                            activeImageIndex: null,
-                                            uploadedImage: null,
-                                        },
-                                    }))
-                                }
                                 priceDelta={imagePrice}
                             />
                         )}

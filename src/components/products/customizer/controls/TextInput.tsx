@@ -25,7 +25,7 @@ export default function TextInput({
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 placeholder="Type your text"
-                className="w-full rounded-xl border-2 border-black px-3 py-2 font-semibold text-black placeholder-gray-400 focus:outline-none focus:border-purple-500"
+                className="w-full rounded-xl border-2 border-black px-3 py-2 font-semibold text-black placeholder-gray-400 focus:outline-none focus:border-blue-500"
             />
         </section>
     );

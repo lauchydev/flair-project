@@ -21,7 +21,7 @@ export default function PriceActionsBar({
             <div className="flex items-center gap-3 rounded-2xl border-4 border-black bg-white px-3 py-3 shadow-xl">
                 <QuantityStepper value={quantity} onChange={onQuantityChange} />
                 <button
-                    className="flex-1 rounded-2xl border-4 border-black bg-purple-600 px-4 py-3 text-center font-black text-white shadow-xl hover:bg-purple-500 transition-colors cursor-pointer"
+                    className="flex-1 rounded-2xl border-3 border-black bg-blue-600 px-4 py-3 text-center font-black text-white shadow-xl hover:bg-blue-500 transition-colors cursor-pointer"
                     onClick={onAddToCart}
                 >
                     Add to cart

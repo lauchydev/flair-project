@@ -51,7 +51,7 @@ export default function TextStyle({
                 <select
                     value={fontFamily}
                     onChange={(e) => onFontChange(e.target.value)}
-                    className="flex-1 rounded-xl border-2 border-black px-3 py-2 font-semibold text-black focus:outline-none focus:border-purple-500"
+                    className="flex-1 rounded-xl border-2 border-black px-3 py-2 font-semibold text-black focus:outline-none focus:border-blue-500"
                 >
                     {FONTS.map((f) => (
                         <option key={f} value={f} style={{ fontFamily: f }}>
@@ -76,7 +76,7 @@ export default function TextStyle({
                     <input
                         value={colorHex}
                         onChange={(e) => onColorChange(e.target.value)}
-                        className="flex-1 rounded-xl border-2 border-black px-3 py-2 font-semibold text-black focus:outline-none focus:border-purple-500"
+                        className="flex-1 rounded-xl border-2 border-black px-3 py-2 font-semibold text-black focus:outline-none focus:border-blue-500"
                         aria-label="Hex input"
                     />
                 </div>
