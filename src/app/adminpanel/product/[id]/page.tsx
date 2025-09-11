@@ -398,10 +398,12 @@ export default function ProductDetailsPage() {
 
   // Colour picking helpers
   function normalizeHexInput(value: string): string {
-    let v = value.trim().toLowerCase();
-    if (!v.startsWith("#")) v = "#" + v;
-    v = "#" + v.slice(1).replace(/[^0-9a-f]/g, "").slice(0, 6);
-    return v;
+    // Remove any existing # and clean the input
+    let v = value.replace("#", "").trim().toLowerCase();
+    // Only keep valid hex characters and limit to 6 characters
+    v = v.replace(/[^0-9a-f]/g, "").slice(0, 6);
+    // Always return with # prefix
+    return "#" + v;
   }
 
   async function pickColour() {
@@ -579,6 +581,9 @@ export default function ProductDetailsPage() {
   const weightUnit = firstVariant?.inventoryItem?.measurement?.weight?.unit;
   const weightDisplay =
     weightValue != null && weightUnit ? `${weightValue} ${String(weightUnit).toLowerCase()}` : "No weight info";
+
+  // Add this state for local hex input values
+  const [localHexValues, setLocalHexValues] = useState<{ [key: number]: string }>({});
 
   if (loading) return <p className="p-6">Loading...</p>;
   if (!product) return <p className="p-6">Product not found</p>;
@@ -957,10 +962,44 @@ export default function ProductDetailsPage() {
                           />
                           <input
                             type="text"
-                            value={hex}
+                            value={localHexValues[idx] !== undefined ? localHexValues[idx] : hex}
                             onChange={(e) => {
-                              const v = normalizeHexInput(e.target.value);
-                              setColours((prev) => prev.map((c, i) => (i === idx ? v : c)));
+                              const inputValue = e.target.value;
+                              let newValue = inputValue;
+                              
+                              // Always ensure # is at the beginning
+                              if (!newValue.startsWith("#")) {
+                                newValue = "#" + newValue;
+                              }
+                              
+                              // Only allow hex characters after #
+                              newValue = newValue.replace(/[^#0-9a-fA-F]/g, "");
+                              
+                              // Limit to 7 characters total (# + 6 hex)
+                              if (newValue.length > 7) {
+                                newValue = newValue.slice(0, 7);
+                              }
+                              
+                              // Update local state
+                              setLocalHexValues(prev => ({ ...prev, [idx]: newValue }));
+                            }}
+                            onKeyDown={(e) => {
+                              // Prevent backspace from removing the #
+                              if (e.key === "Backspace" && e.currentTarget.value === "#") {
+                                e.preventDefault();
+                              }
+                            }}
+                            onBlur={() => {
+                              // Normalize and update the main state when losing focus
+                              const currentValue = localHexValues[idx] !== undefined ? localHexValues[idx] : hex;
+                              const normalized = normalizeHexInput(currentValue);
+                              setColours((prev) => prev.map((c, i) => (i === idx ? normalized : c)));
+                              // Clear local state
+                              setLocalHexValues(prev => {
+                                const newState = { ...prev };
+                                delete newState[idx];
+                                return newState;
+                              });
                             }}
                             className="w-28 px-2 py-1 border rounded text-sm"
                             placeholder="#rrggbb"
