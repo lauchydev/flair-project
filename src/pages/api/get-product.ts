@@ -16,7 +16,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         description
         descriptionHtml
         images(first: 20) { edges { node {id url src altText } } }
-        variants(first: 10) { edges { node { id title price sku barcode inventoryQuantity inventoryItem { measurement { weight { value unit } } } } } }
+        variants(first: 50) { edges { node { id title price sku barcode inventoryQuantity inventoryItem { measurement { weight { value unit } } } } } }
         ci: metafield(namespace: "custom", key: "custom_image") { id namespace key type value }
         ct: metafield(namespace: "custom", key: "custom_text") { id namespace key type value }
         cc: metafield(namespace: "custom", key: "color_customisation") { id namespace key type value }
