@@ -17,8 +17,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   res.setHeader("Cache-Control", "no-store");
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   if (!ADMIN_TOKEN) return res.status(500).json({ error: "Missing SHOPIFY_ADMIN_TOKEN env var" });
-
-    const { id, customImage, customText, customColours, colours, customImagePrice, customTextPrice, customColoursPrice} = req.body as {
+    const { id, customImage, customText, customColours, colours, customImagePrice, customTextPrice, customColoursPrice, productOwner } = req.body as {
     id?: string;
     customImage?: boolean;
     customText?: boolean;
@@ -27,6 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     customImagePrice?: string;
     customTextPrice?: string;
     customColoursPrice?: string;
+    productOwner?: string;
   };
 
   if (!id) return res.status(400).json({ error: "Missing product id" });
@@ -49,6 +49,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         cipv: metafield(namespace: "custom", key: "custom_image_price_variable") { type }
         ctpv: metafield(namespace: "custom", key: "custom_text_price_variable") { type }
         ccpv: metafield(namespace: "custom", key: "colour_customisation_price_variable") { type }
+        po: metafield(namespace: "custom", key: "product_owner") { type }
       }
     }
   `;
@@ -119,6 +120,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         key: "colour_customisation_price_variable",
         type: current.ccpv?.type || "number_decimal",
         value: formatDecimal(customColoursPrice),
+      },
+      {
+        ownerId: id,
+        namespace: "custom",
+        key: "product_owner",
+        type: current.po?.type || "single_line_text_field",
+        value: productOwner || "",
       },
     ];
 

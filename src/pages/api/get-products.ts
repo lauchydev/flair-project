@@ -17,6 +17,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 }
               }
             }
+            productOwner: metafield(namespace: "custom", key: "product_owner") {value}
           }
         }
       }
