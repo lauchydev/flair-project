@@ -12,6 +12,10 @@ import {
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 
+// If your tsconfig has "@/components" path alias, keep this import.
+// Otherwise change to a relative path like: "../../components/layout/LogoutButton"
+import LogoutButton from "@/components/layout/LogoutButton";
+
 type ImageNode = {
   id?: string | null;
   url?: string | null;
@@ -21,8 +25,9 @@ type ImageNode = {
 
 type Product = {
   id: string;
-  title: string;
-  images?: { edges: { node: ImageNode }[] };
+  title?: string;
+  description?: string;
+  images?: { edges?: { node?: ImageNode }[] };
 };
 
 export default function AdminPanelPage() {
@@ -34,18 +39,34 @@ export default function AdminPanelPage() {
   const router = useRouter();
 
   useEffect(() => {
+    let cancelled = false;
+
     async function loadProducts() {
       try {
-        const res = await fetch("/api/get-products");
+        // Avoid cached HTML/data while developing
+        const res = await fetch("/api/get-products", { cache: "no-store" });
         const data = await res.json();
-        setProducts(data || []);
+
+        // Be robust to either array or { products: [...] }
+        const list: Product[] = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.products)
+          ? data.products
+          : (data ?? []);
+
+        if (!cancelled) setProducts(list);
       } catch (err) {
         console.error("Failed to fetch products", err);
+        if (!cancelled) setProducts([]);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
+
     loadProducts();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // focus input when opening search
@@ -96,7 +117,7 @@ export default function AdminPanelPage() {
         {filtered.map((product) => {
           const imgNode = product.images?.edges?.[0]?.node;
           const image = imgNode?.src || imgNode?.url || null;
-          const altText = imgNode?.altText || product.title;
+          const altText = imgNode?.altText || product.title || "Product";
 
           return (
             <li
@@ -120,8 +141,13 @@ export default function AdminPanelPage() {
 
               <div className="p-2.5">
                 <h2 className="line-clamp-2 text-[13px] font-medium text-stone-900">
-                  {product.title}
+                  {product.title || "Untitled"}
                 </h2>
+                {product.description ? (
+                  <p className="text-[11px] text-stone-500 line-clamp-2">
+                    {product.description}
+                  </p>
+                ) : null}
               </div>
 
               <button
@@ -229,6 +255,9 @@ export default function AdminPanelPage() {
                 </button>
               </div>
             )}
+
+            {/* Visible Logout button */}
+            <LogoutButton />
           </div>
         </div>
       </div>
