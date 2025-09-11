@@ -17,7 +17,10 @@ export default function VariantOptions({
 }: VariantOptionsProps) {
     if (
         optionNames.length === 0 ||
-        optionNames.every((name) => name === "Default Title")
+        (optionNames.length === 1 &&
+            optionNames[0] === "Title" &&
+            optionValues["Title"]?.length === 1 &&
+            optionValues["Title"][0] === "Default Title")
     ) {
         return null;
     }

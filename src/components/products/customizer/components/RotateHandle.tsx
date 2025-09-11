@@ -5,12 +5,17 @@ import React from "react";
 interface RotateHandleProps {
     angleDeg: number;
     onStart: (e: React.PointerEvent<HTMLDivElement>) => void;
+    children?: React.ReactNode;
 }
 
 /**
  * Rotate control with percentage indicator.
  */
-export default function RotateHandle({ angleDeg, onStart }: RotateHandleProps) {
+export default function RotateHandle({
+    angleDeg,
+    onStart,
+    children,
+}: RotateHandleProps) {
     return (
         <div className="absolute left-1/2 bottom-[-32px] -translate-x-1/2">
             <div
@@ -42,6 +47,7 @@ export default function RotateHandle({ angleDeg, onStart }: RotateHandleProps) {
                         <polyline points="21 3 21 9 15 9" />
                     </svg>
                 </div>
+                {children}
                 <div
                     className="h-8 px-2 flex items-center justify-center text-xs font-bold text-blue-700 select-none pointer-events-none border-2 border-blue-500 rounded-md bg-white shadow-sm"
                     style={{

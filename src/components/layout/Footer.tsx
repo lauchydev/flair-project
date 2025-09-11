@@ -108,8 +108,7 @@ export default function Footer() {
 
                         <div className="border-t-4 border-black mt-8 pt-6 text-center text-black">
                             <p className="font-semibold">
-                                &copy; {new Date().getFullYear()} Flair · Made
-                                with ❤️
+                                &copy; {new Date().getFullYear()} Flair
                             </p>
                         </div>
                     </div>

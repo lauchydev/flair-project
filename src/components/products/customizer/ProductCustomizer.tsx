@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import type { ShopifyProduct } from "@/types/api/shopify";
 import { getAvailableViewsForProduct } from "@/lib/customizer/config";
 import { getColorImageMap } from "@/lib/customizer/assets";
@@ -15,11 +15,11 @@ import ColorPicker from "./controls/ColorPicker";
 import TextInput from "./controls/TextInput";
 import ImageUpload from "./controls/ImageUpload";
 import ViewSwitcher from "./controls/ViewSwitcher";
-import QuantityStepper from "./controls/QuantityStepper";
 import PreviewCanvas from "./PreviewCanvas";
 import { useVariantOptions } from "./hooks/useVariantOptions";
 import { usePriceDisplay } from "./hooks/usePriceDisplay";
 import TextStyle from "./controls/TextStyle";
+import PriceActionsBar from "./components/PriceActionsBar";
 
 interface ProductCustomizerProps {
     product: ShopifyProduct;
@@ -34,13 +34,41 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
         product.variants.edges[0]?.node.id ?? null
     );
 
+    // Design area default and center helper
+    const defaultDesignArea = useMemo(
+        () => ({ x: 28, y: 23, width: 44, height: 50 }),
+        []
+    );
+    const areaCenter = useMemo(
+        () => ({
+            x: defaultDesignArea.x + defaultDesignArea.width / 2,
+            y: defaultDesignArea.y + defaultDesignArea.height / 2,
+        }),
+        [
+            defaultDesignArea.x,
+            defaultDesignArea.y,
+            defaultDesignArea.width,
+            defaultDesignArea.height,
+        ]
+    );
+
     // Extend viewCustomizations initial state
     const [viewCustomizations, setViewCustomizations] = useState({
         front: {
             text: "",
             uploadedImage: null,
-            textPos: { x: 50, y: 85 },
-            imagePos: { x: 85, y: 15 },
+            uploadedImages: [] as string[],
+            activeImageIndex: null as number | null,
+            imageOverlays: [] as {
+                url: string;
+                x: number;
+                y: number;
+                widthPercent: number;
+                heightPercent: number;
+                angleDeg: number;
+            }[],
+            textPos: { x: areaCenter.x, y: areaCenter.y },
+            imagePos: { x: areaCenter.x, y: areaCenter.y },
             textColor: "#000000",
             textFont:
                 "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
@@ -54,8 +82,18 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
         back: {
             text: "",
             uploadedImage: null,
-            textPos: { x: 50, y: 85 },
-            imagePos: { x: 85, y: 15 },
+            uploadedImages: [] as string[],
+            activeImageIndex: null as number | null,
+            imageOverlays: [] as {
+                url: string;
+                x: number;
+                y: number;
+                widthPercent: number;
+                heightPercent: number;
+                angleDeg: number;
+            }[],
+            textPos: { x: areaCenter.x, y: areaCenter.y },
+            imagePos: { x: areaCenter.x, y: areaCenter.y },
             textColor: "#000000",
             textFont:
                 "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
@@ -84,7 +122,114 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
     const { textPos, imagePos } = viewCustomizations[selectedView];
 
     const currentViewCustomization = viewCustomizations[selectedView];
-    const uploadedImage = currentViewCustomization.uploadedImage;
+    const activeImageUrl = (() => {
+        const overlays = currentViewCustomization.imageOverlays ?? [];
+        const idx = currentViewCustomization.activeImageIndex ?? null;
+        if (idx !== null && overlays[idx]) return overlays[idx].url;
+        const imgsFallback = currentViewCustomization.uploadedImages ?? [];
+        if (idx !== null && imgsFallback[idx]) return imgsFallback[idx];
+        return currentViewCustomization.uploadedImage;
+    })();
+
+    const otherImages = useMemo(() => {
+        const overlays = currentViewCustomization.imageOverlays ?? [];
+        const idx = currentViewCustomization.activeImageIndex ?? null;
+        return overlays
+            .map((o, i) => ({ ...o, index: i }))
+            .filter((o) => o.index !== idx)
+            .map((o) => ({
+                url: o.url,
+                x: o.x,
+                y: o.y,
+                widthPercent: o.widthPercent,
+                heightPercent: o.heightPercent,
+                angleDeg: o.angleDeg,
+            }));
+    }, [
+        currentViewCustomization.imageOverlays,
+        currentViewCustomization.activeImageIndex,
+    ]);
+    // Concise helpers to update current view
+    const updateView = (patch: Partial<typeof currentViewCustomization>) =>
+        setViewCustomizations((prev) => ({
+            ...prev,
+            [selectedView]: { ...prev[selectedView], ...patch },
+        }));
+
+    // Image overlay updaters for the active image
+    const setImagePosition = (pos: { x: number; y: number }) =>
+        setViewCustomizations((prev) => {
+            const view = prev[selectedView];
+            const idx = view.activeImageIndex;
+            let overlays = view.imageOverlays ?? [];
+            if (idx !== null && overlays[idx]) {
+                overlays = overlays.map((o, i) =>
+                    i === idx ? { ...o, x: pos.x, y: pos.y } : o
+                );
+            }
+            return {
+                ...prev,
+                [selectedView]: {
+                    ...view,
+                    imagePos: pos,
+                    imageOverlays: overlays,
+                },
+            };
+        });
+    const setImageWidth = (w: number) =>
+        setViewCustomizations((prev) => {
+            const view = prev[selectedView];
+            const idx = view.activeImageIndex;
+            let overlays = view.imageOverlays ?? [];
+            if (idx !== null && overlays[idx])
+                overlays = overlays.map((o, i) =>
+                    i === idx ? { ...o, widthPercent: w } : o
+                );
+            return {
+                ...prev,
+                [selectedView]: {
+                    ...view,
+                    imageWidthPercent: w,
+                    imageOverlays: overlays,
+                },
+            };
+        });
+    const setImageHeight = (h: number) =>
+        setViewCustomizations((prev) => {
+            const view = prev[selectedView];
+            const idx = view.activeImageIndex;
+            let overlays = view.imageOverlays ?? [];
+            if (idx !== null && overlays[idx])
+                overlays = overlays.map((o, i) =>
+                    i === idx ? { ...o, heightPercent: h } : o
+                );
+            return {
+                ...prev,
+                [selectedView]: {
+                    ...view,
+                    imageHeightPercent: h,
+                    imageOverlays: overlays,
+                },
+            };
+        });
+    const setImageAngle = (a: number) =>
+        setViewCustomizations((prev) => {
+            const view = prev[selectedView];
+            const idx = view.activeImageIndex;
+            let overlays = view.imageOverlays ?? [];
+            if (idx !== null && overlays[idx])
+                overlays = overlays.map((o, i) =>
+                    i === idx ? { ...o, angleDeg: a } : o
+                );
+            return {
+                ...prev,
+                [selectedView]: {
+                    ...view,
+                    imageAngleDeg: a,
+                    imageOverlays: overlays,
+                },
+            };
+        });
     const customText = currentViewCustomization.text;
     const textColor = currentViewCustomization.textColor as string;
     const textFont = currentViewCustomization.textFont as string;
@@ -155,14 +300,53 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
     const priceDisplay = usePriceDisplay(product, selectedVariant, {
         addText: enableCustomText && !!customText,
         textPrice,
-        addImage: enableCustomImage && !!uploadedImage,
+        addImage: enableCustomImage && !!activeImageUrl,
         imagePrice,
     });
 
     // Variant selection logic
     // isOptionAvailable now comes from the hook
 
-    const defaultDesignArea = { x: 28, y: 23, width: 44, height: 50 };
+    // Auto-center on add (when transitioning from empty to present)
+    const prevTextPresentRef = useRef<{ front: boolean; back: boolean }>({
+        front: false,
+        back: false,
+    });
+    useEffect(() => {
+        const vc = viewCustomizations[selectedView];
+        const hasText = !!vc.text;
+        const hadText = prevTextPresentRef.current[selectedView];
+        if (!hadText && hasText) {
+            setViewCustomizations((prev) => ({
+                ...prev,
+                [selectedView]: {
+                    ...prev[selectedView],
+                    textPos: { x: areaCenter.x, y: areaCenter.y },
+                },
+            }));
+        }
+        prevTextPresentRef.current[selectedView] = hasText;
+    }, [selectedView, viewCustomizations, areaCenter.x, areaCenter.y]);
+
+    const prevImagePresentRef = useRef<{ front: boolean; back: boolean }>({
+        front: false,
+        back: false,
+    });
+    useEffect(() => {
+        const vc = viewCustomizations[selectedView];
+        const hasImg = !!vc.uploadedImage;
+        const hadImg = prevImagePresentRef.current[selectedView];
+        if (!hadImg && hasImg) {
+            setViewCustomizations((prev) => ({
+                ...prev,
+                [selectedView]: {
+                    ...prev[selectedView],
+                    imagePos: { x: areaCenter.x, y: areaCenter.y },
+                },
+            }));
+        }
+        prevImagePresentRef.current[selectedView] = hasImg;
+    }, [selectedView, viewCustomizations, areaCenter.x, areaCenter.y]);
 
     return (
         <div className="bg-gradient-to-b from-yellow-50 to-purple-50 py-10">
@@ -210,21 +394,125 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                         {/* Upload image (metafield controlled) */}
                         {enableCustomImage && (
                             <ImageUpload
-                                uploadedImageUrl={uploadedImage}
-                                onSelect={(url) =>
-                                    setViewCustomizations((prev) => ({
-                                        ...prev,
-                                        [selectedView]: {
-                                            ...prev[selectedView],
-                                            uploadedImage: url,
-                                        },
-                                    }))
+                                images={currentViewCustomization.uploadedImages}
+                                activeIndex={
+                                    currentViewCustomization.activeImageIndex
                                 }
-                                onClear={() =>
+                                onAdd={(urls) =>
+                                    setViewCustomizations((prev) => {
+                                        const view = prev[selectedView];
+                                        const existing =
+                                            view.uploadedImages ?? [];
+                                        const combined = [...existing, ...urls];
+                                        const newOverlays = [
+                                            ...(view.imageOverlays ?? []),
+                                            ...urls.map((u) => ({
+                                                url: u,
+                                                x: areaCenter.x,
+                                                y: areaCenter.y,
+                                                widthPercent:
+                                                    view.imageWidthPercent,
+                                                heightPercent:
+                                                    view.imageHeightPercent,
+                                                angleDeg: view.imageAngleDeg,
+                                            })),
+                                        ];
+                                        const nextActive =
+                                            view.activeImageIndex !== null
+                                                ? view.activeImageIndex
+                                                : 0;
+                                        return {
+                                            ...prev,
+                                            [selectedView]: {
+                                                ...view,
+                                                uploadedImages: combined,
+                                                imageOverlays: newOverlays,
+                                                activeImageIndex: nextActive,
+                                                uploadedImage:
+                                                    combined[nextActive] ??
+                                                    null,
+                                            },
+                                        };
+                                    })
+                                }
+                                onRemove={(index) =>
+                                    setViewCustomizations((prev) => {
+                                        const view = prev[selectedView];
+                                        const imgs = [
+                                            ...(view.uploadedImages ?? []),
+                                        ];
+                                        imgs.splice(index, 1);
+                                        const overlays = [
+                                            ...(view.imageOverlays ?? []),
+                                        ];
+                                        overlays.splice(index, 1);
+                                        let nextActive: number | null =
+                                            view.activeImageIndex;
+                                        if (nextActive === index) {
+                                            nextActive = imgs.length ? 0 : null;
+                                        } else if (
+                                            nextActive !== null &&
+                                            index < nextActive
+                                        ) {
+                                            nextActive = nextActive - 1;
+                                        }
+                                        return {
+                                            ...prev,
+                                            [selectedView]: {
+                                                ...view,
+                                                uploadedImages: imgs,
+                                                imageOverlays: overlays,
+                                                activeImageIndex: nextActive,
+                                                uploadedImage:
+                                                    nextActive !== null &&
+                                                    imgs[nextActive]
+                                                        ? imgs[nextActive]
+                                                        : null,
+                                            },
+                                        };
+                                    })
+                                }
+                                onMakeActive={(index) =>
+                                    setViewCustomizations((prev) => {
+                                        const view = prev[selectedView];
+                                        const imgs = view.uploadedImages ?? [];
+                                        const overlay = (view.imageOverlays ??
+                                            [])[index];
+                                        return {
+                                            ...prev,
+                                            [selectedView]: {
+                                                ...view,
+                                                activeImageIndex: index,
+                                                uploadedImage:
+                                                    imgs[index] ?? null,
+                                                // Sync top-level transforms to overlay for editing
+                                                imagePos: overlay
+                                                    ? {
+                                                          x: overlay.x,
+                                                          y: overlay.y,
+                                                      }
+                                                    : view.imagePos,
+                                                imageWidthPercent:
+                                                    overlay?.widthPercent ??
+                                                    view.imageWidthPercent,
+                                                imageHeightPercent:
+                                                    overlay?.heightPercent ??
+                                                    view.imageHeightPercent,
+                                                imageAngleDeg:
+                                                    overlay?.angleDeg ??
+                                                    view.imageAngleDeg,
+                                            },
+                                        };
+                                    })
+                                }
+                                onClearAll={() =>
                                     setViewCustomizations((prev) => ({
                                         ...prev,
                                         [selectedView]: {
                                             ...prev[selectedView],
+                                            uploadedImages: [],
+                                            imageOverlays: [],
+                                            activeImageIndex: null,
                                             uploadedImage: null,
                                         },
                                     }))
@@ -237,15 +525,7 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                         {enableCustomText && (
                             <TextInput
                                 value={customText}
-                                onChange={(val) =>
-                                    setViewCustomizations((prev) => ({
-                                        ...prev,
-                                        [selectedView]: {
-                                            ...prev[selectedView],
-                                            text: val,
-                                        },
-                                    }))
-                                }
+                                onChange={(val) => updateView({ text: val })}
                                 priceDelta={textPrice}
                             />
                         )}
@@ -256,90 +536,50 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                                 fontFamily={textFont}
                                 colorHex={textColor}
                                 onFontChange={(font) =>
-                                    setViewCustomizations((prev) => ({
-                                        ...prev,
-                                        [selectedView]: {
-                                            ...prev[selectedView],
-                                            textFont: font,
-                                        },
-                                    }))
+                                    updateView({ textFont: font })
                                 }
                                 onColorChange={(hex) =>
-                                    setViewCustomizations((prev) => ({
-                                        ...prev,
-                                        [selectedView]: {
-                                            ...prev[selectedView],
-                                            textColor: hex,
-                                        },
-                                    }))
+                                    updateView({ textColor: hex })
                                 }
                             />
                         )}
 
                         {/* Price + Actions bar */}
-                        <section>
-                            <div className="flex items-center gap-3 rounded-2xl border-4 border-black bg-white px-3 py-3 shadow-xl">
-                                {/* Quantity stepper */}
-                                <QuantityStepper
-                                    value={quantity}
-                                    onChange={setQuantity}
-                                />
-
-                                {/* Add to cart button */}
-                                <button
-                                    className="flex-1 rounded-2xl border-4 border-black bg-purple-600 px-4 py-3 text-center font-black text-white shadow-xl hover:bg-purple-500 transition-colors"
-                                    onClick={() => {
-                                        // TODO: Implement Shopify cart with metafield attributes
-                                        console.log("Add to cart clicked", {
-                                            quantity,
-                                            selectedVariantId,
-                                            selectedColor,
-                                            selectedView, // DEBUGGING
-                                            uploadedImage,
-                                            customText,
-                                            // Preparation for cart (line attributes in shopify)
-                                            metafields: {
-                                                custom_text_front:
-                                                    viewCustomizations.front
-                                                        .text,
-                                                custom_text_back:
-                                                    viewCustomizations.back
-                                                        .text,
-                                                custom_color: selectedColor,
-                                                custom_image_front:
-                                                    viewCustomizations.front
-                                                        .uploadedImage,
-                                                custom_image_back:
-                                                    viewCustomizations.back
-                                                        .uploadedImage,
-                                                selected_view: selectedView, // DEBUGGING
-                                            },
-                                        });
-                                    }}
-                                >
-                                    Add to cart
-                                </button>
-
-                                {/* Price display (right aligned) */}
-                                <div className="ml-auto w-max rounded-xl border-2 border-black bg-white px-4 py-2 text-right">
-                                    <div className="text-xl font-black text-black">
-                                        {priceDisplay}
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="mt-2 text-xs font-semibold text-gray-600">
-                                Prices are estimates. Final price updates as you
-                                customize.
-                            </div>
-                        </section>
+                        <PriceActionsBar
+                            quantity={quantity}
+                            onQuantityChange={setQuantity}
+                            onAddToCart={() => {
+                                console.log("Add to cart clicked", {
+                                    quantity,
+                                    selectedVariantId,
+                                    selectedColor,
+                                    selectedView,
+                                    activeImageUrl,
+                                    customText,
+                                    metafields: {
+                                        custom_text_front:
+                                            viewCustomizations.front.text,
+                                        custom_text_back:
+                                            viewCustomizations.back.text,
+                                        custom_color: selectedColor,
+                                        custom_image_front:
+                                            viewCustomizations.front
+                                                .uploadedImage,
+                                        custom_image_back:
+                                            viewCustomizations.back
+                                                .uploadedImage,
+                                        selected_view: selectedView,
+                                    },
+                                });
+                            }}
+                            priceDisplay={priceDisplay}
+                        />
                     </aside>
 
                     {/* Preview Panel */}
                     <section className="lg:col-span-8">
-                        <div className="rounded-3xl border-4 border-black bg-white p-4 shadow-xl">
+                        <div className="mx-auto w-fit rounded-3xl border-4 border-black bg-white p-4 shadow-xl">
                             {/* View switcher */}
-                            {/* TODO: Fix view changer, each view should display a different image of the product, 
-              should carry over colour and changes on each view (images, text and placement) should be saved on each view */}
                             <ViewSwitcher
                                 views={availableViews}
                                 selected={selectedView}
@@ -354,96 +594,66 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                                     selectedColor,
                                     selectedView
                                 );
+
+                                const textProps = {
+                                    text: customText,
+                                    textPosition: textPos,
+                                    onTextPositionChange: (pos: {
+                                        x: number;
+                                        y: number;
+                                    }) => updateView({ textPos: pos }),
+                                    textColor,
+                                    textFont,
+                                    textWidthPercent,
+                                    onTextWidthPercentChange: (w: number) =>
+                                        updateView({ textWidthPercent: w }),
+                                    textHeightPercent,
+                                    onTextHeightPercentChange: (h: number) =>
+                                        updateView({ textHeightPercent: h }),
+                                    textAngleDeg,
+                                    onTextAngleDegChange: (a: number) =>
+                                        updateView({ textAngleDeg: a }),
+                                    onTextDelete: () => {
+                                        setViewCustomizations((prev) => ({
+                                            ...prev,
+                                            [selectedView]: {
+                                                ...prev[selectedView],
+                                                text: "",
+                                                textPos: {
+                                                    x: areaCenter.x,
+                                                    y: areaCenter.y,
+                                                },
+                                                textWidthPercent: 40,
+                                                textHeightPercent: 12,
+                                                textAngleDeg: 0,
+                                                textColor: "#000000",
+                                                textFont:
+                                                    "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+                                            },
+                                        }));
+                                    },
+                                };
+
+                                const imageProps = {
+                                    uploadedImageUrl: activeImageUrl,
+                                    otherImages,
+                                    imagePosition: imagePos,
+                                    onImagePositionChange: setImagePosition,
+                                    imageWidthPercent,
+                                    imageHeightPercent,
+                                    imageAngleDeg,
+                                    onImageWidthPercentChange: setImageWidth,
+                                    onImageHeightPercentChange: setImageHeight,
+                                    onImageAngleDegChange: setImageAngle,
+                                };
                                 return (
                                     <PreviewCanvas
                                         backgroundUrl={img.url}
                                         backgroundAlt={img.altText}
                                         view={selectedView}
                                         colorHex={selectedColor}
-                                        text={customText}
-                                        textPosition={textPos}
-                                        onTextPositionChange={(pos) =>
-                                            setViewCustomizations((prev) => ({
-                                                ...prev,
-                                                [selectedView]: {
-                                                    ...prev[selectedView],
-                                                    textPos: pos,
-                                                },
-                                            }))
-                                        }
-                                        textColor={textColor}
-                                        textFont={textFont}
-                                        textWidthPercent={textWidthPercent}
-                                        onTextWidthPercentChange={(w) =>
-                                            setViewCustomizations((prev) => ({
-                                                ...prev,
-                                                [selectedView]: {
-                                                    ...prev[selectedView],
-                                                    textWidthPercent: w,
-                                                },
-                                            }))
-                                        }
-                                        textHeightPercent={textHeightPercent}
-                                        onTextHeightPercentChange={(h) =>
-                                            setViewCustomizations((prev) => ({
-                                                ...prev,
-                                                [selectedView]: {
-                                                    ...prev[selectedView],
-                                                    textHeightPercent: h,
-                                                },
-                                            }))
-                                        }
-                                        textAngleDeg={textAngleDeg}
-                                        onTextAngleDegChange={(a) =>
-                                            setViewCustomizations((prev) => ({
-                                                ...prev,
-                                                [selectedView]: {
-                                                    ...prev[selectedView],
-                                                    textAngleDeg: a,
-                                                },
-                                            }))
-                                        }
-                                        uploadedImageUrl={uploadedImage}
-                                        imagePosition={imagePos}
-                                        onImagePositionChange={(pos) =>
-                                            setViewCustomizations((prev) => ({
-                                                ...prev,
-                                                [selectedView]: {
-                                                    ...prev[selectedView],
-                                                    imagePos: pos,
-                                                },
-                                            }))
-                                        }
-                                        imageWidthPercent={imageWidthPercent}
-                                        imageHeightPercent={imageHeightPercent}
-                                        imageAngleDeg={imageAngleDeg}
-                                        onImageWidthPercentChange={(w) =>
-                                            setViewCustomizations((prev) => ({
-                                                ...prev,
-                                                [selectedView]: {
-                                                    ...prev[selectedView],
-                                                    imageWidthPercent: w,
-                                                },
-                                            }))
-                                        }
-                                        onImageHeightPercentChange={(h) =>
-                                            setViewCustomizations((prev) => ({
-                                                ...prev,
-                                                [selectedView]: {
-                                                    ...prev[selectedView],
-                                                    imageHeightPercent: h,
-                                                },
-                                            }))
-                                        }
-                                        onImageAngleDegChange={(a) =>
-                                            setViewCustomizations((prev) => ({
-                                                ...prev,
-                                                [selectedView]: {
-                                                    ...prev[selectedView],
-                                                    imageAngleDeg: a,
-                                                },
-                                            }))
-                                        }
+                                        {...textProps}
+                                        {...imageProps}
                                         showDesignArea
                                         designArea={defaultDesignArea}
                                     />

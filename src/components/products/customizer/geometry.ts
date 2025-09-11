@@ -4,7 +4,7 @@ export type PercentPos = { x: number; y: number };
  * Clamp a percent-based coordinate to the canvas bounds [0,100].
  * Returns a new object and does not mutate inputs.
  */
-export function clampToCanvas(x: number, y: number): PercentPos {
+export function snapToCanvas(x: number, y: number): PercentPos {
     return {
         x: Math.min(100, Math.max(0, x)),
         y: Math.min(100, Math.max(0, y)),

@@ -3,10 +3,18 @@
 import Image from "next/image";
 import { useRef, useEffect, useState } from "react";
 import type { ViewPose } from "./types";
-import CornerHandle from "./components/CornerHandle";
-import RotateHandle from "./components/RotateHandle";
+import TextOverlay from "./components/overlays/TextOverlay";
+import ImageOverlay from "./components/overlays/ImageOverlay";
+import DebugBadge from "./components/DebugBadge";
 import {
-    clampToCanvas as clampXY,
+    DesignAreaClip,
+    DesignAreaOutline,
+    ClippedText,
+    ClippedImage,
+} from "./components/DesignArea";
+import { calculateFontSizePx } from "./components/utils/text";
+import {
+    snapToCanvas as snapXY,
     clientToPercent,
     pointerAngleDeg,
     softSnapCenterToRectWithCenter,
@@ -35,8 +43,17 @@ interface PreviewCanvasProps {
     onTextHeightPercentChange?: (h: number) => void;
     textAngleDeg?: number;
     onTextAngleDegChange?: (deg: number) => void;
+    onTextDelete?: () => void;
 
     uploadedImageUrl: string | null;
+    otherImages?: {
+        url: string;
+        x: number;
+        y: number;
+        widthPercent: number;
+        heightPercent: number;
+        angleDeg: number;
+    }[];
     imagePosition: PercentPos;
     onImagePositionChange?: (pos: PercentPos) => void;
     imageWidthPercent?: number;
@@ -68,7 +85,9 @@ export default function PreviewCanvas({
     onTextHeightPercentChange,
     textAngleDeg = 0,
     onTextAngleDegChange,
+    onTextDelete,
     uploadedImageUrl,
+    otherImages = [],
     imagePosition,
     onImagePositionChange,
     imageWidthPercent = 20,
@@ -81,7 +100,7 @@ export default function PreviewCanvas({
     designArea,
     showDesignArea,
 }: PreviewCanvasProps) {
-    const CANVAS_PX = 800;
+    // const CANVAS_PX = 800; // centralized in DesignArea helpers
     const [selected, setSelected] = useState<"text" | "image" | null>(null);
     const [topLayer, setTopLayer] = useState<"text" | "image" | null>(null);
     type ResizeStart = {
@@ -95,9 +114,12 @@ export default function PreviewCanvas({
         target: "text" | "image";
     };
     type Interaction =
-        | { kind: "move"; offset: PercentPos }
-        | { kind: "image-move"; offset: PercentPos }
+        | { kind: "move"; target: "text" | "image"; offset: PercentPos }
         | { kind: "resize"; start: ResizeStart }
+        | {
+              kind: "text-width-resize";
+              start: { leftEdgeX: number; startCenterY: number };
+          }
         | {
               kind: "rotate";
               target: "text" | "image";
@@ -136,140 +158,159 @@ export default function PreviewCanvas({
             e.stopPropagation();
             setSelected(target);
             setTopLayer(target);
-            if (target === "text") {
-                const rect = (
-                    containerRef.current as HTMLDivElement
-                ).getBoundingClientRect();
-                const px = ((e.clientX - rect.left) / rect.width) * 100;
-                const py = ((e.clientY - rect.top) / rect.height) * 100;
-                activeDragRef.current = {
-                    kind: "move",
-                    offset: { x: px - textPosition.x, y: py - textPosition.y },
-                };
-            } else {
-                const rect = (
-                    containerRef.current as HTMLDivElement
-                ).getBoundingClientRect();
-                const px = ((e.clientX - rect.left) / rect.width) * 100;
-                const py = ((e.clientY - rect.top) / rect.height) * 100;
-                activeDragRef.current = {
-                    kind: "image-move",
-                    offset: {
-                        x: px - imagePosition.x,
-                        y: py - imagePosition.y,
-                    },
-                };
-            }
+            const rect = (
+                containerRef.current as HTMLDivElement
+            ).getBoundingClientRect();
+            const { x: px, y: py } = clientToPercent(
+                e.clientX,
+                e.clientY,
+                rect
+            );
+            const base = target === "text" ? textPosition : imagePosition;
+            activeDragRef.current = {
+                kind: "move",
+                target,
+                offset: { x: px - base.x, y: py - base.y },
+            };
             containerRef.current?.setPointerCapture?.(e.pointerId);
         };
 
-    // Helper to clamp to canvas bounds only (0-100)
-    const clampToCanvas = (x: number, y: number): PercentPos => clampXY(x, y);
+    // Helper to snap to canvas bounds only (0-100)
+    const snapToCanvas = (x: number, y: number): PercentPos => snapXY(x, y);
+
+    // Small helpers to shrink onPointerMove
+    const getEventPercent = (ev: React.PointerEvent<HTMLDivElement>) => {
+        const rect = (
+            containerRef.current || ev.currentTarget
+        ).getBoundingClientRect();
+        return clientToPercent(ev.clientX, ev.clientY, rect);
+    };
+
+    const snapIfDesignArea = (
+        x: number,
+        y: number,
+        halfW: number,
+        halfH: number
+    ) => {
+        if (!designArea) return { x, y };
+        return softSnapCenterToRectWithCenter(x, y, halfW, halfH, designArea);
+    };
+
+    const handleMove = (
+        target: "text" | "image",
+        px: number,
+        py: number,
+        offset: { x: number; y: number }
+    ) => {
+        const base = snapToCanvas(px - offset.x, py - offset.y);
+        if (target === "text") {
+            const halfW = (textWidthPercent ?? 0) / 2;
+            const halfH = (textHeightPercent ?? 0) / 2;
+            const snapped = snapIfDesignArea(base.x, base.y, halfW, halfH);
+            onTextPositionChange?.({ x: snapped.x, y: snapped.y });
+        } else {
+            const halfW = (imageWidthPercent ?? 0) / 2;
+            const halfH = (imageHeightPercent ?? 0) / 2;
+            const snapped = snapIfDesignArea(base.x, base.y, halfW, halfH);
+            onImagePositionChange?.({ x: snapped.x, y: snapped.y });
+        }
+    };
+
+    const handleResize = (px: number, py: number, s: ResizeStart) => {
+        const sx = s.handle === "ne" || s.handle === "se" ? 1 : -1;
+        const sy = s.handle === "sw" || s.handle === "se" ? 1 : -1;
+        const anchorX = s.cx - (s.w / 2) * sx;
+        const anchorY = s.cy - (s.h / 2) * sy;
+        const widthFromX = Math.abs(px - anchorX);
+        const heightFromY = Math.abs(py - anchorY);
+        const snapPct = (v: number) => Math.max(5, Math.min(100, v));
+        let newW = snapPct(widthFromX);
+        let newH = snapPct(heightFromY);
+        const applyAspect = (aspect: number | null) => {
+            if (!aspect) return;
+            const proposedW = snapPct(widthFromX);
+            const proposedH = snapPct(heightFromY);
+            if (Math.abs(widthFromX - s.w) >= Math.abs(heightFromY - s.h)) {
+                newW = proposedW;
+                newH = snapPct(newW / aspect);
+            } else {
+                newH = proposedH;
+                newW = snapPct(newH * aspect);
+            }
+        };
+        if (s.target === "image") applyAspect(imageAspectRef.current);
+        if (s.target === "text") applyAspect(textAspectRef.current);
+        const cx = anchorX + (newW / 2) * sx;
+        const cy = anchorY + (newH / 2) * sy;
+        if (s.target === "text") {
+            onTextWidthPercentChange?.(newW);
+            onTextHeightPercentChange?.(newH);
+            onTextPositionChange?.(snapToCanvas(cx, cy));
+        } else {
+            onImageWidthPercentChange?.(newW);
+            onImageHeightPercentChange?.(newH);
+            onImagePositionChange?.(snapToCanvas(cx, cy));
+        }
+    };
+
+    const handleTextWidthResize = (
+        px: number,
+        start: { leftEdgeX: number; startCenterY: number }
+    ) => {
+        const leftEdge = start.leftEdgeX;
+        const canvasMaxW = Math.max(5, 100 - leftEdge);
+        const areaRight = designArea ? designArea.x + designArea.width : 100;
+        const areaMaxW = Math.max(5, areaRight - leftEdge);
+        const maxW = Math.min(canvasMaxW, areaMaxW);
+        let newW = px - leftEdge;
+        newW = Math.max(5, Math.min(maxW, newW));
+        const newCenterX = leftEdge + newW / 2;
+        onTextWidthPercentChange?.(newW);
+        onTextPositionChange?.(snapToCanvas(newCenterX, start.startCenterY));
+    };
+
+    const handleRotate = (
+        ev: React.PointerEvent<HTMLDivElement>,
+        data: {
+            centerPx: { cx: number; cy: number };
+            startAngleDeg: number;
+            startPointerAngleDeg: number;
+            target: "text" | "image";
+        }
+    ) => {
+        const currentPointerAngleDeg =
+            (Math.atan2(
+                ev.clientY - data.centerPx.cy,
+                ev.clientX - data.centerPx.cx
+            ) *
+                180) /
+            Math.PI;
+        let next =
+            data.startAngleDeg +
+            (currentPointerAngleDeg - data.startPointerAngleDeg);
+        if (next > 180) next -= 360;
+        if (next <= -180) next += 360;
+        if (data.target === "text") onTextAngleDegChange?.(Math.round(next));
+        else onImageAngleDegChange?.(Math.round(next));
+    };
 
     const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
         if (!draggable || !activeDragRef.current) return;
-
-        const rect = (
-            containerRef.current || e.currentTarget
-        ).getBoundingClientRect();
-        const px = ((e.clientX - rect.left) / rect.width) * 100;
-        const py = ((e.clientY - rect.top) / rect.height) * 100;
+        const { x: px, y: py } = getEventPercent(e);
         const interaction = activeDragRef.current;
-        if (interaction.kind === "move") {
-            const { x, y } = clampToCanvas(
-                px - interaction.offset.x,
-                py - interaction.offset.y
-            );
-            let nx = x;
-            let ny = y;
-            if (designArea) {
-                const halfW = (textWidthPercent ?? 0) / 2;
-                const halfH = (textHeightPercent ?? 0) / 2;
-                const snapped = softSnapCenterToRectWithCenter(
-                    nx,
-                    ny,
-                    halfW,
-                    halfH,
-                    designArea
-                );
-                nx = snapped.x;
-                ny = snapped.y;
-            }
-            onTextPositionChange?.({ x: nx, y: ny });
-        } else if (interaction.kind === "image-move") {
-            const { x, y } = clampToCanvas(
-                px - interaction.offset.x,
-                py - interaction.offset.y
-            );
-            let nx = x;
-            let ny = y;
-            if (designArea) {
-                const halfW = (imageWidthPercent ?? 0) / 2;
-                const halfH = (imageHeightPercent ?? 0) / 2;
-                const snapped = softSnapCenterToRectWithCenter(
-                    nx,
-                    ny,
-                    halfW,
-                    halfH,
-                    designArea
-                );
-                nx = snapped.x;
-                ny = snapped.y;
-            }
-            onImagePositionChange?.({ x: nx, y: ny });
-        } else if (interaction.kind === "resize") {
-            const s = interaction.start;
-            const dx = px - s.px0;
-            const dy = py - s.py0;
-            const sx = s.handle === "ne" || s.handle === "se" ? 1 : -1;
-            const sy = s.handle === "sw" || s.handle === "se" ? 1 : -1;
-            let newW = Math.max(5, Math.min(100, s.w + 2 * sx * dx));
-            let newH = Math.max(5, Math.min(100, s.h + 2 * sy * dy));
-            // Maintain aspect ratio when resizing image or text
-            if (s.target === "image" && imageAspectRef.current) {
-                const ar = imageAspectRef.current;
-                const currentRatio = newW / Math.max(1e-6, newH);
-                if (currentRatio > ar)
-                    newW = Math.max(5, Math.min(100, newH * ar));
-                else newH = Math.max(5, Math.min(100, newW / ar));
-            }
-            if (s.target === "text" && textAspectRef.current) {
-                const ar = textAspectRef.current; // width/height
-                const currentRatio = newW / Math.max(1e-6, newH);
-                if (currentRatio > ar)
-                    newW = Math.max(5, Math.min(100, newH * ar));
-                else newH = Math.max(5, Math.min(100, newW / ar));
-            }
-            const cx = s.cx + ((newW - s.w) / 2) * sx;
-            const cy = s.cy + ((newH - s.h) / 2) * sy;
-            if (s.target === "text") {
-                onTextWidthPercentChange?.(newW);
-                onTextHeightPercentChange?.(newH);
-                onTextPositionChange?.(clampToCanvas(cx, cy));
-            } else {
-                onImageWidthPercentChange?.(newW);
-                onImageHeightPercentChange?.(newH);
-                onImagePositionChange?.(clampToCanvas(cx, cy));
-            }
-        } else if (interaction.kind === "rotate") {
-            const currentPointerAngleDeg =
-                (Math.atan2(
-                    e.clientY - interaction.centerPx.cy,
-                    e.clientX - interaction.centerPx.cx
-                ) *
-                    180) /
-                Math.PI;
-            let next =
-                interaction.startAngleDeg +
-                (currentPointerAngleDeg - interaction.startPointerAngleDeg);
-            // Normalize to [-180, 180] for stability
-            if (next > 180) next -= 360;
-            if (next <= -180) next += 360;
-            if (interaction.target === "text") {
-                onTextAngleDegChange?.(Math.round(next));
-            } else {
-                onImageAngleDegChange?.(Math.round(next));
-            }
+        switch (interaction.kind) {
+            case "move":
+                handleMove(interaction.target, px, py, interaction.offset);
+                break;
+            case "resize":
+                handleResize(px, py, interaction.start);
+                break;
+            case "text-width-resize":
+                handleTextWidthResize(px, interaction.start);
+                break;
+            case "rotate":
+                handleRotate(e, interaction);
+                break;
         }
     };
 
@@ -322,6 +363,37 @@ export default function PreviewCanvas({
         containerRef.current?.setPointerCapture?.(e.pointerId);
     };
 
+    // Short helper to begin rotation for text or image
+    const rotateStart =
+        (target: "text" | "image") =>
+        (e: React.PointerEvent<HTMLDivElement>) => {
+            if (!draggable) return;
+            const node =
+                target === "text"
+                    ? (textRef.current as HTMLDivElement | null)
+                    : (imageRef.current as HTMLDivElement | null);
+            const box = node
+                ? node.getBoundingClientRect()
+                : e.currentTarget.getBoundingClientRect();
+            const cx = box.left + box.width / 2;
+            const cy = box.top + box.height / 2;
+            const startPointerAngleDeg = pointerAngleDeg(
+                cx,
+                cy,
+                e.clientX,
+                e.clientY
+            );
+            const startAngle = target === "text" ? textAngleDeg : imageAngleDeg;
+            activeDragRef.current = {
+                kind: "rotate",
+                target,
+                centerPx: { cx, cy },
+                startAngleDeg: startAngle,
+                startPointerAngleDeg,
+            };
+            containerRef.current?.setPointerCapture?.(e.pointerId);
+        };
+
     const onPointerUp = () => {
         const interaction = activeDragRef.current;
         activeDragRef.current = null;
@@ -330,32 +402,22 @@ export default function PreviewCanvas({
         const centerX = designArea.x + designArea.width / 2;
         const centerY = designArea.y + designArea.height / 2;
         if (interaction?.kind === "move") {
-            const halfW = (textWidthPercent ?? 0) / 2;
-            const halfH = (textHeightPercent ?? 0) / 2;
-            if (
-                isOverlayFullyOutsideRect(
-                    textPosition.x,
-                    textPosition.y,
-                    halfW,
-                    halfH,
-                    designArea
-                )
-            ) {
-                onTextPositionChange?.({ x: centerX, y: centerY });
-            }
-        } else if (interaction?.kind === "image-move") {
-            const halfW = (imageWidthPercent ?? 0) / 2;
-            const halfH = (imageHeightPercent ?? 0) / 2;
-            if (
-                isOverlayFullyOutsideRect(
-                    imagePosition.x,
-                    imagePosition.y,
-                    halfW,
-                    halfH,
-                    designArea
-                )
-            ) {
-                onImagePositionChange?.({ x: centerX, y: centerY });
+            const isText = interaction.target === "text";
+            const halfW =
+                ((isText ? textWidthPercent : imageWidthPercent) ?? 0) / 2;
+            const halfH =
+                ((isText ? textHeightPercent : imageHeightPercent) ?? 0) / 2;
+            const pos = isText ? textPosition : imagePosition;
+            const outside = isOverlayFullyOutsideRect(
+                pos.x,
+                pos.y,
+                halfW,
+                halfH,
+                designArea
+            );
+            if (outside) {
+                if (isText) onTextPositionChange?.({ x: centerX, y: centerY });
+                else onImagePositionChange?.({ x: centerX, y: centerY });
             }
         }
     };
@@ -384,339 +446,135 @@ export default function PreviewCanvas({
             {/* Removed color overlay; color selection no longer tints the preview */}
 
             {text && (
-                <div
-                    ref={textRef}
-                    onPointerDown={onPointerDown("text")}
-                    style={{
-                        position: "absolute",
-                        left: `${textPosition.x}%`,
-                        top: `${textPosition.y}%`,
-                        transform: `translate(-50%, -50%) rotate(${textAngleDeg}deg)`,
-                        cursor: draggable ? "grab" : "default",
-                        fontFamily: textFont,
-                        color: textColor,
-                        userSelect: "none",
-                        width: `${textWidthPercent}%`,
-                        height: `${textHeightPercent}%`,
-                        zIndex: topLayer === "text" ? 20 : 10,
-                    }}
-                >
-                    {selected === "text" ? (
-                        <div className="relative w-full h-full border-2 border-dashed border-blue-500 rounded-md shadow">
-                            <div
-                                className={`w-full h-full flex items-center justify-center text-center ${
-                                    designArea ? "invisible" : ""
-                                }`}
-                                ref={textContentRef}
-                                style={{
-                                    fontSize: `${Math.max(
-                                        8,
-                                        Math.min(
-                                            Math.floor(
-                                                800 *
-                                                    0.8 *
-                                                    (textHeightPercent / 100)
-                                            ),
-                                            200
-                                        )
-                                    )}px`,
-                                    lineHeight: 1.1,
-                                    whiteSpace: "nowrap",
-                                    overflow: "hidden",
-                                    textOverflow: "clip",
-                                }}
-                            >
-                                {text}
-                            </div>
-                            <CornerHandle
-                                position="nw"
-                                positionClassName="left-0 top-0 -translate-x-1/2 -translate-y-1/2"
-                                onDown={(e) => startResize("text", "nw", e)}
-                            />
-                            <CornerHandle
-                                position="ne"
-                                positionClassName="right-0 top-0 translate-x-1/2 -translate-y-1/2"
-                                onDown={(e) => startResize("text", "ne", e)}
-                            />
-                            <CornerHandle
-                                position="sw"
-                                positionClassName="left-0 bottom-0 -translate-x-1/2 translate-y-1/2"
-                                onDown={(e) => startResize("text", "sw", e)}
-                            />
-                            <CornerHandle
-                                position="se"
-                                positionClassName="right-0 bottom-0 translate-x-1/2 translate-y-1/2"
-                                onDown={(e) => startResize("text", "se", e)}
-                            />
-                            {onTextAngleDegChange && (
-                                <RotateHandle
-                                    angleDeg={textAngleDeg}
-                                    onStart={(e) => {
-                                        if (!draggable) return;
-                                        const box = (
-                                            textRef.current as HTMLDivElement
-                                        ).getBoundingClientRect();
-                                        const cx = box.left + box.width / 2;
-                                        const cy = box.top + box.height / 2;
-                                        const startPointerAngleDeg =
-                                            pointerAngleDeg(
-                                                cx,
-                                                cy,
-                                                e.clientX,
-                                                e.clientY
-                                            );
-                                        activeDragRef.current = {
-                                            kind: "rotate",
-                                            target: "text",
-                                            centerPx: { cx, cy },
-                                            startAngleDeg: textAngleDeg,
-                                            startPointerAngleDeg,
-                                        };
-                                        containerRef.current?.setPointerCapture?.(
-                                            e.pointerId
-                                        );
-                                    }}
-                                />
-                            )}
-                        </div>
-                    ) : (
-                        <div
-                            className={`w-full h-full flex items-center justify-center text-center ${
-                                designArea ? "invisible" : ""
-                            }`}
-                            ref={textContentRef}
-                            style={{
-                                fontSize: `${Math.max(
-                                    8,
-                                    Math.min(
-                                        Math.floor(
-                                            800 *
-                                                0.8 *
-                                                (textHeightPercent / 100)
-                                        ),
-                                        200
-                                    )
-                                )}px`,
-                                lineHeight: 1.1,
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "clip",
-                            }}
-                        >
-                            {text}
-                        </div>
-                    )}
+                <div onPointerDown={onPointerDown("text")}>
+                    <TextOverlay
+                        ref={textRef as React.Ref<HTMLDivElement>}
+                        selected={selected === "text"}
+                        hideContent={!!designArea}
+                        text={text}
+                        contentRef={textContentRef as React.Ref<HTMLDivElement>}
+                        pos={{ x: textPosition.x, y: textPosition.y }}
+                        sizePct={{ w: textWidthPercent, h: textHeightPercent }}
+                        angleDeg={textAngleDeg}
+                        zIndex={topLayer === "text" ? 20 : 10}
+                        cursor={draggable ? "grab" : "default"}
+                        fontFamily={textFont}
+                        color={textColor}
+                        fontPx={calculateFontSizePx(textHeightPercent)}
+                        onResize={(h, e) => startResize("text", h, e)}
+                        onRotateStart={
+                            onTextAngleDegChange
+                                ? rotateStart("text")
+                                : undefined
+                        }
+                        onDelete={onTextDelete}
+                        onWidthDragStart={(e) => {
+                            if (!draggable) return;
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const leftEdgeX =
+                                textPosition.x - textWidthPercent / 2;
+                            activeDragRef.current = {
+                                kind: "text-width-resize",
+                                start: {
+                                    leftEdgeX,
+                                    startCenterY: textPosition.y,
+                                },
+                            };
+                            containerRef.current?.setPointerCapture?.(
+                                e.pointerId
+                            );
+                        }}
+                    />
                 </div>
             )}
 
+            {/* Render additional images beneath active (non-interactive) */}
+            {otherImages.map((img, key) => (
+                <ImageOverlay
+                    key={`static-${key}`}
+                    url={img.url}
+                    pos={{ x: img.x, y: img.y }}
+                    sizePct={{ w: img.widthPercent, h: img.heightPercent }}
+                    angleDeg={img.angleDeg}
+                    zIndex={5}
+                />
+            ))}
+
             {uploadedImageUrl && (
-                <div
-                    ref={imageRef}
-                    onPointerDown={onPointerDown("image")}
-                    style={{
-                        position: "absolute",
-                        left: `${imagePosition.x}%`,
-                        top: `${imagePosition.y}%`,
-                        transform: `translate(-50%, -50%) rotate(${imageAngleDeg}deg)`,
-                        cursor: draggable ? "grab" : "default",
-                        width: `${imageWidthPercent}%`,
-                        height: `${imageHeightPercent}%`,
-                        zIndex: topLayer === "image" ? 20 : 10,
-                    }}
-                    className={`rounded-md ${
-                        selected === "image"
-                            ? "border-2 border-blue-500 border-dashed"
-                            : "border-0"
-                    } shadow select-none`}
-                >
-                    <Image
-                        src={uploadedImageUrl}
-                        alt="Overlay"
-                        fill
-                        className={`object-contain ${
-                            designArea ? "invisible" : ""
-                        }`}
-                        sizes="96px"
+                <div onPointerDown={onPointerDown("image")}>
+                    <ImageOverlay
+                        ref={imageRef as React.Ref<HTMLDivElement>}
+                        url={uploadedImageUrl}
+                        pos={{ x: imagePosition.x, y: imagePosition.y }}
+                        sizePct={{
+                            w: imageWidthPercent,
+                            h: imageHeightPercent,
+                        }}
+                        angleDeg={imageAngleDeg}
+                        zIndex={topLayer === "image" ? 20 : 10}
+                        cursor={draggable ? "grab" : "default"}
+                        interactive={
+                            selected === "image" &&
+                            !!onImageWidthPercentChange &&
+                            !!onImageHeightPercentChange
+                        }
+                        onResize={(h, e) => startResize("image", h, e)}
+                        onRotateStart={
+                            onImageAngleDegChange
+                                ? rotateStart("image")
+                                : undefined
+                        }
                     />
-                    {selected === "image" &&
-                        onImageWidthPercentChange &&
-                        onImageHeightPercentChange && (
-                            <>
-                                <CornerHandle
-                                    position="nw"
-                                    positionClassName="left-0 top-0 -translate-x-1/2 -translate-y-1/2"
-                                    onDown={(e) =>
-                                        startResize("image", "nw", e)
-                                    }
-                                />
-                                <CornerHandle
-                                    position="ne"
-                                    positionClassName="right-0 top-0 translate-x-1/2 -translate-y-1/2"
-                                    onDown={(e) =>
-                                        startResize("image", "ne", e)
-                                    }
-                                />
-                                <CornerHandle
-                                    position="sw"
-                                    positionClassName="left-0 bottom-0 -translate-x-1/2 translate-y-1/2"
-                                    onDown={(e) =>
-                                        startResize("image", "sw", e)
-                                    }
-                                />
-                                <CornerHandle
-                                    position="se"
-                                    positionClassName="right-0 bottom-0 translate-x-1/2 translate-y-1/2"
-                                    onDown={(e) =>
-                                        startResize("image", "se", e)
-                                    }
-                                />
-                                {onImageAngleDegChange && (
-                                    <RotateHandle
-                                        angleDeg={imageAngleDeg}
-                                        onStart={(e) => {
-                                            if (!draggable) return;
-                                            const box = (
-                                                imageRef.current as HTMLDivElement
-                                            ).getBoundingClientRect();
-                                            const cx = box.left + box.width / 2;
-                                            const cy = box.top + box.height / 2;
-                                            const startPointerAngleDeg =
-                                                pointerAngleDeg(
-                                                    cx,
-                                                    cy,
-                                                    e.clientX,
-                                                    e.clientY
-                                                );
-                                            activeDragRef.current = {
-                                                kind: "rotate",
-                                                target: "image",
-                                                centerPx: { cx, cy },
-                                                startAngleDeg: imageAngleDeg,
-                                                startPointerAngleDeg,
-                                            };
-                                            containerRef.current?.setPointerCapture?.(
-                                                e.pointerId
-                                            );
-                                        }}
-                                    />
-                                )}
-                            </>
-                        )}
                 </div>
             )}
 
             {designArea && (
-                <div
-                    className="absolute"
-                    style={{
-                        left: `${designArea.x}%`,
-                        top: `${designArea.y}%`,
-                        width: `${designArea.width}%`,
-                        height: `${designArea.height}%`,
-                        overflow: "hidden",
-                        pointerEvents: "none",
-                        zIndex: 0,
-                    }}
-                >
+                <DesignAreaClip area={designArea} zIndex={0}>
                     {text && (
-                        <div
-                            style={{
-                                position: "absolute",
-                                left: `${
-                                    (textPosition.x / 100) * CANVAS_PX -
-                                    (designArea.x / 100) * CANVAS_PX
-                                }px`,
-                                top: `${
-                                    (textPosition.y / 100) * CANVAS_PX -
-                                    (designArea.y / 100) * CANVAS_PX
-                                }px`,
-                                transform: `translate(-50%, -50%) rotate(${textAngleDeg}deg)`,
-                                fontFamily: textFont,
-                                color: textColor,
-                                width: `${
-                                    (textWidthPercent / 100) * CANVAS_PX
-                                }px`,
-                                height: `${
-                                    (textHeightPercent / 100) * CANVAS_PX
-                                }px`,
-                                zIndex: topLayer === "text" ? 2 : 1,
-                            }}
-                        >
-                            <div
-                                className="w-full h-full flex items-center justify-center text-center"
-                                style={{
-                                    fontSize: `${Math.max(
-                                        8,
-                                        Math.min(
-                                            Math.floor(
-                                                800 *
-                                                    0.8 *
-                                                    (textHeightPercent / 100)
-                                            ),
-                                            200
-                                        )
-                                    )}px`,
-                                    lineHeight: 1.1,
-                                    whiteSpace: "nowrap",
-                                    overflow: "hidden",
-                                    textOverflow: "clip",
-                                }}
-                            >
-                                {text}
-                            </div>
-                        </div>
+                        <ClippedText
+                            area={designArea}
+                            text={text}
+                            pos={{ x: textPosition.x, y: textPosition.y }}
+                            widthPercent={textWidthPercent}
+                            heightPercent={textHeightPercent}
+                            angleDeg={textAngleDeg}
+                            fontFamily={textFont}
+                            color={textColor}
+                            zIndex={topLayer === "text" ? 2 : 1}
+                        />
                     )}
-
+                    {otherImages.map((img, key) => (
+                        <ClippedImage
+                            key={`clip-static-${key}`}
+                            area={designArea}
+                            url={img.url}
+                            pos={{ x: img.x, y: img.y }}
+                            widthPercent={img.widthPercent}
+                            heightPercent={img.heightPercent}
+                            angleDeg={img.angleDeg}
+                            zIndex={1}
+                        />
+                    ))}
                     {uploadedImageUrl && (
-                        <div
-                            style={{
-                                position: "absolute",
-                                left: `${
-                                    (imagePosition.x / 100) * CANVAS_PX -
-                                    (designArea.x / 100) * CANVAS_PX
-                                }px`,
-                                top: `${
-                                    (imagePosition.y / 100) * CANVAS_PX -
-                                    (designArea.y / 100) * CANVAS_PX
-                                }px`,
-                                transform: `translate(-50%, -50%) rotate(${imageAngleDeg}deg)`,
-                                width: `${
-                                    (imageWidthPercent / 100) * CANVAS_PX
-                                }px`,
-                                height: `${
-                                    (imageHeightPercent / 100) * CANVAS_PX
-                                }px`,
-                                zIndex: topLayer === "image" ? 2 : 1,
-                            }}
-                            className="select-none"
-                        >
-                            <Image
-                                src={uploadedImageUrl}
-                                alt="Overlay"
-                                fill
-                                className="object-contain"
-                                sizes="96px"
-                            />
-                        </div>
+                        <ClippedImage
+                            area={designArea}
+                            url={uploadedImageUrl}
+                            pos={{ x: imagePosition.x, y: imagePosition.y }}
+                            widthPercent={imageWidthPercent}
+                            heightPercent={imageHeightPercent}
+                            angleDeg={imageAngleDeg}
+                            zIndex={topLayer === "image" ? 2 : 1}
+                        />
                     )}
-                </div>
+                </DesignAreaClip>
             )}
 
             {showDesignArea && designArea && (
-                <div
-                    className="absolute border-2 border-dashed border-blue-500 pointer-events-none"
-                    style={{
-                        left: `${designArea.x}%`,
-                        top: `${designArea.y}%`,
-                        width: `${designArea.width}%`,
-                        height: `${designArea.height}%`,
-                    }}
-                />
+                <DesignAreaOutline area={designArea} />
             )}
 
-            <div className="pointer-events-none absolute left-4 top-4 rounded-lg bg-white/70 px-2 py-1 text-xs font-black text-gray-700">
-                {view}
-            </div>
+            <DebugBadge text={view} />
         </div>
     );
 }
