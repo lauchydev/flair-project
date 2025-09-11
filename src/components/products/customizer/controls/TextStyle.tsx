@@ -94,8 +94,10 @@ export default function TextStyle({
                                 key={hex}
                                 type="button"
                                 onClick={() => onColorChange(hex)}
-                                className={`h-12 w-12 rounded-full border-2 ${borderClass} transition-transform hover:scale-[1.03] focus:outline-none focus:ring-2 focus:ring-blue-400 ${
-                                    isActive ? "ring-2 ring-blue-500" : ""
+                                className={`h-8 w-8 rounded-full border-2 border-black ${borderClass} shadow transition-all ${
+                                    isActive
+                                        ? "ring-2 ring-blue-500 scale-110"
+                                        : "hover:scale-105"
                                 }`}
                                 style={{ backgroundColor: hex }}
                                 aria-label={`Set color ${hex}`}

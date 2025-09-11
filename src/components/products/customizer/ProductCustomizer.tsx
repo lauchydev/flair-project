@@ -8,6 +8,7 @@ import {
     parseMetafieldBoolean,
     parseColorMetafield,
     parsePriceModifier,
+    parseDesignAreaMetafield,
 } from "@/lib/customizer/metafields";
 import type { ViewPose } from "./types";
 import VariantOptions from "./controls/VariantOptions";
@@ -34,22 +35,106 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
         product.variants.edges[0]?.node.id ?? null
     );
 
-    // Design area default and center helper
-    const defaultDesignArea = useMemo(
-        () => ({ x: 28, y: 23, width: 44, height: 50 }),
-        []
-    );
-    const areaCenter = useMemo(
-        () => ({
-            x: defaultDesignArea.x + defaultDesignArea.width / 2,
-            y: defaultDesignArea.y + defaultDesignArea.height / 2,
-        }),
-        [
-            defaultDesignArea.x,
-            defaultDesignArea.y,
-            defaultDesignArea.width,
-            defaultDesignArea.height,
-        ]
+    // Design area (metafield-backed) and per-view centers
+    const designAreaConfig = useMemo(() => {
+        type Rect = { x: number; y: number; width: number; height: number };
+        const isRect = (o: unknown): o is Rect => {
+            if (!o || typeof o !== "object") return false;
+            const r = o as Record<string, unknown>;
+            return (
+                typeof r.x === "number" &&
+                typeof r.y === "number" &&
+                typeof r.width === "number" &&
+                typeof r.height === "number"
+            );
+        };
+        /* Retrieve the design area from the product metafield in shopfify */
+        const parsed = parseDesignAreaMetafield(product.designArea?.value);
+        console.log("DESIGN AREA:", parsed);
+        /* Default Design Area when no area is defined */
+        const fallback: Rect = { x: 224, y: 184, width: 352, height: 432 }; // approx 28%,23%,44%,54% on 800px
+        if (!parsed) {
+            return { front: fallback, back: fallback } as Record<
+                ViewPose,
+                Rect
+            >;
+        }
+        if (isRect(parsed)) {
+            const rect = parsed as Rect;
+            return { front: rect, back: rect } as Record<ViewPose, Rect>;
+        }
+        const byViewUnknown = parsed as Record<string, unknown>;
+        const pick = (k: string): Rect | undefined =>
+            isRect(byViewUnknown[k]) ? (byViewUnknown[k] as Rect) : undefined;
+        return {
+            front:
+                pick("front") ||
+                pick("Front") ||
+                pick("FRONT") ||
+                pick("default") ||
+                fallback,
+            back:
+                pick("back") ||
+                pick("Back") ||
+                pick("BACK") ||
+                pick("default") ||
+                pick("front") ||
+                fallback,
+        } as Record<ViewPose, Rect>;
+    }, [product.designArea?.value]);
+
+    // Convert pixel rects (800x800) to percent rects for rendering
+    const designAreaPercent = useMemo(() => {
+        const toPct = (v: number) => (v / 800) * 100;
+        const pxToPct = (r: {
+            x: number;
+            y: number;
+            width: number;
+            height: number;
+        }) => ({
+            x: toPct(r.x),
+            y: toPct(r.y),
+            width: toPct(r.width),
+            height: toPct(r.height),
+        });
+        return {
+            front: pxToPct(designAreaConfig.front),
+            back: pxToPct(designAreaConfig.back),
+        } as Record<
+            ViewPose,
+            { x: number; y: number; width: number; height: number }
+        >;
+    }, [designAreaConfig.front, designAreaConfig.back]);
+
+    const areaCenters = useMemo(() => {
+        return {
+            front: {
+                x:
+                    designAreaPercent.front.x +
+                    designAreaPercent.front.width / 2,
+                y:
+                    designAreaPercent.front.y +
+                    designAreaPercent.front.height / 2,
+            },
+            back: {
+                x: designAreaPercent.back.x + designAreaPercent.back.width / 2,
+                y: designAreaPercent.back.y + designAreaPercent.back.height / 2,
+            },
+        } as Record<ViewPose, { x: number; y: number }>;
+    }, [
+        designAreaPercent.front.x,
+        designAreaPercent.front.y,
+        designAreaPercent.front.width,
+        designAreaPercent.front.height,
+        designAreaPercent.back.x,
+        designAreaPercent.back.y,
+        designAreaPercent.back.width,
+        designAreaPercent.back.height,
+    ]);
+
+    const currentCenter = useMemo(
+        () => areaCenters[selectedView],
+        [areaCenters, selectedView]
     );
 
     // Extend viewCustomizations initial state
@@ -67,8 +152,8 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                 heightPercent: number;
                 angleDeg: number;
             }[],
-            textPos: { x: areaCenter.x, y: areaCenter.y },
-            imagePos: { x: areaCenter.x, y: areaCenter.y },
+            textPos: { x: areaCenters.front.x, y: areaCenters.front.y },
+            imagePos: { x: areaCenters.front.x, y: areaCenters.front.y },
             textColor: "#000000",
             textFont:
                 "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
@@ -92,8 +177,8 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                 heightPercent: number;
                 angleDeg: number;
             }[],
-            textPos: { x: areaCenter.x, y: areaCenter.y },
-            imagePos: { x: areaCenter.x, y: areaCenter.y },
+            textPos: { x: areaCenters.back.x, y: areaCenters.back.y },
+            imagePos: { x: areaCenters.back.x, y: areaCenters.back.y },
             textColor: "#000000",
             textFont:
                 "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
@@ -318,12 +403,12 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                 ...prev,
                 [selectedView]: {
                     ...prev[selectedView],
-                    textPos: { x: areaCenter.x, y: areaCenter.y },
+                    textPos: { x: currentCenter.x, y: currentCenter.y },
                 },
             }));
         }
         prevTextPresentRef.current[selectedView] = hasText;
-    }, [selectedView, viewCustomizations, areaCenter.x, areaCenter.y]);
+    }, [selectedView, viewCustomizations, currentCenter.x, currentCenter.y]);
 
     const prevImagePresentRef = useRef<{ front: boolean; back: boolean }>({
         front: false,
@@ -338,12 +423,12 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                 ...prev,
                 [selectedView]: {
                     ...prev[selectedView],
-                    imagePos: { x: areaCenter.x, y: areaCenter.y },
+                    imagePos: { x: currentCenter.x, y: currentCenter.y },
                 },
             }));
         }
         prevImagePresentRef.current[selectedView] = hasImg;
-    }, [selectedView, viewCustomizations, areaCenter.x, areaCenter.y]);
+    }, [selectedView, viewCustomizations, currentCenter.x, currentCenter.y]);
 
     return (
         <div className="bg-gradient-to-b from-yellow-50 to-purple-50 py-10">
@@ -405,8 +490,8 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                                             ...(view.imageOverlays ?? []),
                                             ...urls.map((u: string) => ({
                                                 url: u,
-                                                x: areaCenter.x,
-                                                y: areaCenter.y,
+                                                x: currentCenter.x,
+                                                y: currentCenter.y,
                                                 widthPercent:
                                                     view.imageWidthPercent,
                                                 heightPercent:
@@ -605,8 +690,8 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                                                 ...prev[selectedView],
                                                 text: "",
                                                 textPos: {
-                                                    x: areaCenter.x,
-                                                    y: areaCenter.y,
+                                                    x: currentCenter.x,
+                                                    y: currentCenter.y,
                                                 },
                                                 textWidthPercent: 40,
                                                 textHeightPercent: 12,
@@ -640,7 +725,9 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
                                         {...textProps}
                                         {...imageProps}
                                         showDesignArea
-                                        designArea={defaultDesignArea}
+                                        designArea={
+                                            designAreaPercent[selectedView]
+                                        }
                                     />
                                 );
                             })()}
