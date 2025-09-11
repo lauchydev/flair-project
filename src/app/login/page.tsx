@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useUser } from '../../components/UserContext';
 import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
@@ -8,6 +9,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const { setUser } = useUser();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,12 +25,13 @@ export default function LoginPage() {
       const data = await res.json().catch(() => ({}));
 
       if (res.ok) {
-        if (data.role === 'admin') {
+        setUser({ email: data.email, role: data.role, id: data.id });
+        if (data.role === 'admin' || data.role === 'designer') {
           router.push('/adminpanel');
         } else {
           // ensure customer record exists
           await fetch('/api/customers/init', { method: 'POST' }).catch(() => {});
-          router.push('/products');
+          router.push('/adminpanel');
         }
       } else {
         setError(data.error || 'Invalid email or password');

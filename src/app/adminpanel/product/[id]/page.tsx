@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useUser } from "@/components/UserContext";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -76,6 +77,54 @@ type Product = {
 };
 
 export default function ProductDetailsPage() {
+  const [editingSkuId, setEditingSkuId] = useState<string | null>(null);
+  const [editingBarcodeId, setEditingBarcodeId] = useState<string | null>(null);
+  const [draftSkuValue, setDraftSkuValue] = useState("");
+  const [draftBarcodeValue, setDraftBarcodeValue] = useState("");
+
+  async function saveSkuForVariant(variantId: string, sku: string) {
+    if (!product) return;
+    try {
+      const res = await fetch("/api/update-product", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: productId, variantId, sku }),
+      });
+      const text = await res.text();
+      let json: any;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = { parseError: true, body: text };
+      }
+      if (!res.ok) return alert(json?.error || "Failed to update SKU");
+      await loadProduct();
+    } catch (e: any) {
+      alert(`Network error: ${e?.message || e}`);
+    }
+  }
+
+  async function saveBarcodeForVariant(variantId: string, barcode: string) {
+    if (!product) return;
+    try {
+      const res = await fetch("/api/update-product", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: productId, variantId, barcode }),
+      });
+      const text = await res.text();
+      let json: any;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = { parseError: true, body: text };
+      }
+      if (!res.ok) return alert(json?.error || "Failed to update barcode");
+      await loadProduct();
+    } catch (e: any) {
+      alert(`Network error: ${e?.message || e}`);
+    }
+  }
   const params = useParams() as { id: string };
   const productId = decodeURIComponent(params.id);
 
@@ -87,7 +136,29 @@ export default function ProductDetailsPage() {
   const [editingDesc, setEditingDesc] = useState(false);
   const [editingSku, setEditingSku] = useState(false);
   const [editingBarcode, setEditingBarcode] = useState(false);
-  const [editingStock, setEditingStock] = useState(false);
+  const [editingStock, setEditingStock] = useState<string | null>(null);
+  // Save stock for a specific variant
+  async function saveStockForVariant(variantId: string, stock: string) {
+    if (!product) return;
+    try {
+      const res = await fetch("/api/update-product", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: productId, variantId, inventoryQuantity: stock }),
+      });
+      const text = await res.text();
+      let json: any;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = { parseError: true, body: text };
+      }
+      if (!res.ok) return alert(json?.error || "Failed to update stock");
+      await loadProduct();
+    } catch (e: any) {
+      alert(`Network error: ${e?.message || e}`);
+    }
+  }
   const [editingWeight, setEditingWeight] = useState(false);
   const [editingProductOwner, setEditingProductOwner] = useState(false);
   const [editingPrice, setEditingPrice] = useState(false);
@@ -128,10 +199,23 @@ export default function ProductDetailsPage() {
   const images = product?.images?.edges ?? [];
   const activeImage = images[activeIdx]?.node;
 
-  //temp designer emails
-  const designeremails = ["designer1@example.com", "designer2@example.com", "test@example.com"];
-  const currentUser = "designer2@example.com";
-  const currentUserRole = "admin";
+  const { user } = useUser();
+  const currentUser = user?.email || "";
+  const currentUserRole = user?.role || "";
+  const [designeremails, setDesignerEmails] = useState<string[]>([]);
+
+  useEffect(() => {
+    async function fetchDesignerEmails() {
+      try {
+        const res = await fetch("/api/get-designer-emails");
+        const data = await res.json();
+        setDesignerEmails(data.emails || []);
+      } catch {
+        setDesignerEmails([]);
+      }
+    }
+    fetchDesignerEmails();
+  }, []);
 
   const currentDesc = useMemo(() => {
     if (!product) return "";
@@ -191,7 +275,7 @@ export default function ProductDetailsPage() {
       if (!editingWeight) {
         setDraftWeight(weightValue != null ? String(weightValue) : "");
       }
-
+      
       // colours
       try {
         const arr = data.ca?.value ? JSON.parse(data.ca.value) : [];
@@ -393,7 +477,7 @@ export default function ProductDetailsPage() {
       }
       if (!res.ok) return alert(json?.error || "Failed to update stock");
       await loadProduct();
-      setEditingStock(false);
+  setEditingStock(null);
     } catch (e: any) {
       alert(`Network error: ${e?.message || e}`);
     }
@@ -771,7 +855,6 @@ export default function ProductDetailsPage() {
                 </button>
               )}
             </div>
-
             {!editingDesc ? (
               <div className="prose max-w-none">
                 {currentDesc ? (
@@ -931,7 +1014,6 @@ export default function ProductDetailsPage() {
                   </label>
                 )}
               </div>
-              <p className="text-sm text-gray-500">Weight: {weightDisplay}</p>
             </div>
 
             {customColours && (
@@ -1039,112 +1121,13 @@ export default function ProductDetailsPage() {
           {product.variants?.edges?.length ? (
             <div className="mt-8 p-4 border rounded">
               <h3 className="text-xl font-semibold mb-4">Product Details</h3>
-              <ul className="space-y-1">
-                {product.variants.edges.map(({ node }) => (
-                  <li key={node.id} className="text-sm text-gray-600">
-                    <div className="mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold">SKU:</span>
-                        {!editingSku ? (
-                          <span>{skuDisplay}</span>
-                        ) : (
-                          <>
-                            <input value={draftSku} onChange={e => setDraftSku(e.target.value)} className="border rounded px-2 py-1" />
-                            <button onClick={saveSku} className="p-2 rounded bg-black text-white" title="Save SKU" type="button">
-                              <CheckIcon className="w-4 h-4" />
-                            </button>
-                            <button onClick={() => { setEditingSku(false); setDraftSku(skuDisplay); }} className="p-2 rounded border" title="Cancel" type="button">
-                              <XMarkIcon className="w-4 h-4" />
-                            </button>
-                          </>
-                        )}
-                        {!editingSku && (
-                          <button onClick={() => setEditingSku(true)} className="p-2 rounded hover:bg-gray-100" title="Edit SKU" type="button">
-                            <PencilSquareIcon className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    {/* Barcode with pencil */}
-                    <div className="mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold">Barcode:</span>
-                        {!editingBarcode ? (
-                          <span>{barcodeDisplay}</span>
-                        ) : (
-                          <>
-                            <input value={draftBarcode} onChange={e => setDraftBarcode(e.target.value)} className="border rounded px-2 py-1" />
-                            <button onClick={saveBarcode} className="p-2 rounded bg-black text-white" title="Save Barcode" type="button">
-                              <CheckIcon className="w-4 h-4" />
-                            </button>
-                            <button onClick={() => { setEditingBarcode(false); setDraftBarcode(barcodeDisplay); }} className="p-2 rounded border" title="Cancel" type="button">
-                              <XMarkIcon className="w-4 h-4" />
-                            </button>
-                          </>
-                        )}
-                        {!editingBarcode && (
-                          <button onClick={() => setEditingBarcode(true)} className="p-2 rounded hover:bg-gray-100" title="Edit Barcode" type="button">
-                            <PencilSquareIcon className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    {/* Stock with pencil */}
-                    <div className="mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold">Stock:</span>
-                        {!editingStock ? (
-                          <span>{stockDisplay}</span>
-                        ) : (
-                          <>
-                            <input value={draftStock} onChange={e => setDraftStock(e.target.value)} className="border rounded px-2 py-1" />
-                            <button onClick={saveStock} className="p-2 rounded bg-black text-white" title="Save Stock" type="button">
-                              <CheckIcon className="w-4 h-4" />
-                            </button>
-                            <button onClick={() => { setEditingStock(false); setDraftStock(String(stockDisplay)); }} className="p-2 rounded border" title="Cancel" type="button">
-                              <XMarkIcon className="w-4 h-4" />
-                            </button>
-                          </>
-                        )}
-                        {!editingStock && (
-                          <button onClick={() => setEditingStock(true)} className="p-2 rounded hover:bg-gray-100" title="Edit Stock" type="button">
-                            <PencilSquareIcon className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    {/* Weight with pencil */}
-                    <div className="mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold">Weight:</span>
-                        {!editingWeight ? (
-                          <span>{weightDisplay}</span>
-                        ) : (
-                          <>
-                            <input
-                              type="number"
-                              value={draftWeight}
-                              onChange={e => setDraftWeight(e.target.value)}
-                              className="border rounded px-2 py-1 w-24"
-                              min="0"
-                            />
-                            <button onClick={saveWeight} className="p-2 rounded bg-black text-white" title="Save Weight" type="button">
-                              <CheckIcon className="w-4 h-4" />
-                            </button>
-                            <button onClick={() => { setEditingWeight(false); setDraftWeight(weightDisplay.split(' ')[0] || ""); }} className="p-2 rounded border" title="Cancel" type="button">
-                              <XMarkIcon className="w-4 h-4" />
-                            </button>
-                          </>
-                        )}
-                        {!editingWeight && (
-                          <button onClick={() => setEditingWeight(true)} className="p-2 rounded hover:bg-gray-100" title="Edit Weight" type="button">
-                            <PencilSquareIcon className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    {/* Product Owner */}
-                    <div className="mb-2">
+              {/* First variant details with editing functionality */}
+              {(() => {
+                const first = product.variants?.edges?.[0]?.node;
+                if (!first) return null;
+                return (
+                  <ul className="space-y-1 mb-4">
+                    <li className="text-sm text-gray-600 mb-2">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold">Product Owner:</span>
                         {!editingProductOwner ? (
@@ -1199,9 +1182,192 @@ export default function ProductDetailsPage() {
                           </button>
                         )}
                       </div>
-                    </div>
-                  </li>
-                ))}
+                    </li>
+                    <li className="text-sm text-gray-600 mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">Weight:</span>
+                        {!editingWeight ? (
+                          <span>{first.inventoryItem?.measurement?.weight?.value != null && first.inventoryItem?.measurement?.weight?.unit ? `${first.inventoryItem.measurement.weight.value} ${String(first.inventoryItem.measurement.weight.unit).toLowerCase()}` : "No weight info"}</span>
+                        ) : (
+                          <>
+                            <input
+                              type="number"
+                              value={draftWeight}
+                              onChange={e => setDraftWeight(e.target.value)}
+                              className="border rounded px-2 py-1 w-24"
+                              min="0"
+                            />
+                            <button onClick={saveWeight} className="p-2 rounded bg-black text-white" title="Save Weight" type="button">
+                              <CheckIcon className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => { setEditingWeight(false); setDraftWeight(first.inventoryItem?.measurement?.weight?.value != null ? String(first.inventoryItem.measurement.weight.value) : ""); }} className="p-2 rounded border" title="Cancel" type="button">
+                              <XMarkIcon className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
+                        {!editingWeight && (
+                          <button onClick={() => setEditingWeight(true)} className="p-2 rounded hover:bg-gray-100" title="Edit Weight" type="button">
+                            <PencilSquareIcon className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </li>
+                  </ul>
+                );
+              })()}
+              {/* Per-variant stock and name */}
+              <h4 className="text-lg font-semibold mt-2 mb-2">Stock by Variant</h4>
+              <ul className="space-y-1">
+                {product.variants.edges.map(({ node }, idx) => {
+                  return (
+                    <li key={node.id} className="text-sm text-gray-600">
+                      <div>
+                        <span className="font-semibold">{node.title}</span>
+                      </div>
+                      {/* SKU editing */}
+                      <div className="ml-4">
+                        <span className="font-semibold">SKU:</span>
+                        {editingSkuId === node.id ? (
+                          <>
+                            <input
+                              value={draftSkuValue}
+                              onChange={e => setDraftSkuValue(e.target.value)}
+                              className="border rounded px-2 py-1 ml-2"
+                            />
+                            <button
+                              onClick={async () => {
+                                await saveSkuForVariant(node.id, draftSkuValue);
+                                setEditingSkuId(null);
+                              }}
+                              className="p-2 rounded bg-black text-white ml-1"
+                              title="Save SKU"
+                              type="button"
+                            >
+                              <CheckIcon className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => setEditingSkuId(null)}
+                              className="p-2 rounded border ml-1"
+                              title="Cancel"
+                              type="button"
+                            >
+                              <XMarkIcon className="w-4 h-4" />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="ml-2">{node.sku ?? "No SKU info"}</span>
+                            <button
+                              onClick={() => {
+                                setEditingSkuId(node.id);
+                                setDraftSkuValue(node.sku ?? "");
+                              }}
+                              className="p-2 rounded hover:bg-gray-100 ml-1"
+                              title="Edit SKU"
+                              type="button"
+                            >
+                              <PencilSquareIcon className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                      {/* Barcode editing */}
+                      <div className="ml-4">
+                        <span className="font-semibold">Barcode:</span>
+                        {editingBarcodeId === node.id ? (
+                          <>
+                            <input
+                              value={draftBarcodeValue}
+                              onChange={e => setDraftBarcodeValue(e.target.value)}
+                              className="border rounded px-2 py-1 ml-2"
+                            />
+                            <button
+                              onClick={async () => {
+                                await saveBarcodeForVariant(node.id, draftBarcodeValue);
+                                setEditingBarcodeId(null);
+                              }}
+                              className="p-2 rounded bg-black text-white ml-1"
+                              title="Save Barcode"
+                              type="button"
+                            >
+                              <CheckIcon className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => setEditingBarcodeId(null)}
+                              className="p-2 rounded border ml-1"
+                              title="Cancel"
+                              type="button"
+                            >
+                              <XMarkIcon className="w-4 h-4" />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="ml-2">{node.barcode ?? "No barcode info"}</span>
+                            <button
+                              onClick={() => {
+                                setEditingBarcodeId(node.id);
+                                setDraftBarcodeValue(node.barcode ?? "");
+                              }}
+                              className="p-2 rounded hover:bg-gray-100 ml-1"
+                              title="Edit Barcode"
+                              type="button"
+                            >
+                              <PencilSquareIcon className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                      {/* Stock editing */}
+                      <div className="ml-4">
+                        <span className="font-semibold">Stock:</span>
+                        {editingStock === node.id ? (
+                          <>
+                            <input
+                              value={draftStock}
+                              onChange={e => setDraftStock(e.target.value)}
+                              className="border rounded px-2 py-1 ml-2"
+                            />
+                            <button
+                              onClick={async () => {
+                                await saveStockForVariant(node.id, draftStock);
+                                setEditingStock(null);
+                              }}
+                              className="p-2 rounded bg-black text-white ml-1"
+                              title="Save Stock"
+                              type="button"
+                            >
+                              <CheckIcon className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => setEditingStock(null)}
+                              className="p-2 rounded border ml-1"
+                              title="Cancel"
+                              type="button"
+                            >
+                              <XMarkIcon className="w-4 h-4" />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="ml-2">{node.inventoryQuantity ?? "No stock info"}</span>
+                            <button
+                              onClick={() => {
+                                setEditingStock(node.id);
+                                setDraftStock(node.inventoryQuantity != null ? String(node.inventoryQuantity) : "");
+                              }}
+                              className="p-2 rounded hover:bg-gray-100 ml-1"
+                              title="Edit Stock"
+                              type="button"
+                            >
+                              <PencilSquareIcon className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           ) : null}

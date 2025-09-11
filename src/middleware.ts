@@ -25,7 +25,7 @@ export function middleware(req: NextRequest) {
 
   // Protect all admin routes + make them non-cacheable
   if (isAdminRoute) {
-    if (role !== "admin") {
+    if (role !== "admin" && role !== "designer") {
       const loginUrl = new URL("/login", origin);
       loginUrl.searchParams.set("redirectedFrom", pathname);
       const res = NextResponse.redirect(loginUrl);

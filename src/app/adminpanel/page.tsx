@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
+import { useUser } from '../../components/UserContext';
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -40,8 +41,9 @@ export default function AdminPanelPage() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const router = useRouter();
-  const currentUser = "designer2@example.com";
-  const currentUserRole = "admin";
+  const { user } = useUser();
+  const currentUser = user?.email || "";
+  const currentUserRole =user?.role || "";
 
   useEffect(() => {
     let cancelled = false;
