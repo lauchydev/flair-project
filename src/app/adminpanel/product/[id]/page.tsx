@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useUser } from "@/components/UserContext";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -128,10 +129,23 @@ export default function ProductDetailsPage() {
   const images = product?.images?.edges ?? [];
   const activeImage = images[activeIdx]?.node;
 
-  //temp designer emails
-  const designeremails = ["designer1@example.com", "designer2@example.com", "test@example.com"];
-  const currentUser = "designer2@example.com";
-  const currentUserRole = "admin";
+  const { user } = useUser();
+  const currentUser = user?.email || "";
+  const currentUserRole = user?.role || "";
+  const [designeremails, setDesignerEmails] = useState<string[]>([]);
+
+  useEffect(() => {
+    async function fetchDesignerEmails() {
+      try {
+        const res = await fetch("/api/get-designer-emails");
+        const data = await res.json();
+        setDesignerEmails(data.emails || []);
+      } catch {
+        setDesignerEmails([]);
+      }
+    }
+    fetchDesignerEmails();
+  }, []);
 
   const currentDesc = useMemo(() => {
     if (!product) return "";
