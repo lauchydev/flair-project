@@ -25,10 +25,13 @@ type ImageNode = {
 
 type Product = {
   id: string;
-  title?: string;
-  description?: string;
-  images?: { edges?: { node?: ImageNode }[] };
+  title: string;
+  images?: { edges: { node: ImageNode }[] };
+  metafields?: { namespace: string; key: string; value: string; type: string }[];
+  productOwner?: string;
 };
+
+
 
 export default function AdminPanelPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -37,6 +40,8 @@ export default function AdminPanelPage() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const router = useRouter();
+  const currentUser = "designer2@example.com";
+  const currentUserRole = "admin";
 
   useEffect(() => {
     let cancelled = false;
@@ -46,15 +51,12 @@ export default function AdminPanelPage() {
         // Avoid cached HTML/data while developing
         const res = await fetch("/api/get-products", { cache: "no-store" });
         const data = await res.json();
-
-        // Be robust to either array or { products: [...] }
-        const list: Product[] = Array.isArray(data)
-          ? data
-          : Array.isArray(data?.products)
-          ? data.products
-          : (data ?? []);
-
-        if (!cancelled) setProducts(list);
+        // Extract productOwner from metafields
+        const productsWithOwner = (data || []).map((p: any) => ({
+          ...p,
+          productOwner: p.productOwner?.value || ""
+        }));
+        setProducts(productsWithOwner);
       } catch (err) {
         console.error("Failed to fetch products", err);
         if (!cancelled) setProducts([]);
@@ -79,9 +81,16 @@ export default function AdminPanelPage() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return products;
-    return products.filter((p) => p.title?.toLowerCase().includes(q));
-  }, [products, query]);
+  const ownedProducts = products.filter((p) => p.productOwner === currentUser);
+    if (currentUserRole === "admin") {
+      if (!q) return products;
+      return products.filter((p) => p.title?.toLowerCase().includes(q));
+    } else {
+      if (!q) return ownedProducts;
+      return ownedProducts.filter((p) => p.title?.toLowerCase().includes(q));
+    }
+  }, [products, query, currentUser, currentUserRole]);
+
 
   const Grid = useMemo(() => {
     if (loading) {
@@ -143,11 +152,9 @@ export default function AdminPanelPage() {
                 <h2 className="line-clamp-2 text-[13px] font-medium text-stone-900">
                   {product.title || "Untitled"}
                 </h2>
-                {product.description ? (
-                  <p className="text-[11px] text-stone-500 line-clamp-2">
-                    {product.description}
-                  </p>
-                ) : null}
+                <p className="text-[11px] text-stone-500 mt-1">
+                  Designer: {(!product.productOwner || product.productOwner === "None@Set.test") ? "None" : product.productOwner}
+                </p>
               </div>
 
               <button
