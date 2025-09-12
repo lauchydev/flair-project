@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
 			);
 		}
 
-		// Generate preview image URL (we'll implement the actual generation)
+		// Generate preview image URL
 		const previewImageUrl = await generateCustomizationPreview(
 			customization,
 			productImageUrl
@@ -40,7 +40,7 @@ async function generateCustomizationPreview(
 ): Promise<string> {
 	// Create a 800x800 canvas for the preview
 	const canvas = createCanvas(800, 800);
-	const ctx = canvas.getContext('2d');
+	const ctx = canvas.getContext("2d");
 
 	try {
 		// Load and draw the product image
@@ -48,10 +48,10 @@ async function generateCustomizationPreview(
 		ctx.drawImage(productImage, 0, 0, 800, 800);
 
 		// Only render the front view for preview
-		const frontView = customization.views.find(view => view.view === 'front');
+		const frontView = customization.views.find((view) => view.view === "front");
 		if (!frontView) {
 			// If no front view, return the product image
-			return canvas.toDataURL('image/png');
+			return canvas.toDataURL("image/png");
 		}
 
 		// Render text overlays
@@ -65,16 +65,16 @@ async function generateCustomizationPreview(
 		}
 
 		// Return as base64 data URL
-		return canvas.toDataURL('image/png');
+		return canvas.toDataURL("image/png");
 	} catch (error) {
 		// Return a simple colored canvas as fallback
-		ctx.fillStyle = '#f0f0f0';
+		ctx.fillStyle = "#f0f0f0";
 		ctx.fillRect(0, 0, 800, 800);
-		ctx.fillStyle = '#666';
-		ctx.font = '24px Arial';
-		ctx.textAlign = 'center';
-		ctx.fillText('Preview unavailable', 400, 400);
-		return canvas.toDataURL('image/png');
+		ctx.fillStyle = "#666";
+		ctx.font = "24px Arial";
+		ctx.textAlign = "center";
+		ctx.fillText("Preview unavailable", 400, 400);
+		return canvas.toDataURL("image/png");
 	}
 }
 
@@ -97,10 +97,10 @@ async function renderTextOverlay(ctx: any, textOverlay: any) {
 
 	// Set text properties
 	const fontSize = Math.min(pixels.height * 0.8, 48);
-	ctx.font = `bold ${fontSize}px ${textOverlay.font || 'Arial'}`;
+	ctx.font = `bold ${fontSize}px ${textOverlay.font || "Arial"}`;
 	ctx.fillStyle = textOverlay.color;
-	ctx.textAlign = 'center';
-	ctx.textBaseline = 'middle';
+	ctx.textAlign = "center";
+	ctx.textBaseline = "middle";
 
 	// Draw the text
 	ctx.fillText(textOverlay.text, 0, 0);
@@ -123,28 +123,38 @@ async function renderImageOverlay(ctx: any, imageOverlay: any) {
 			return;
 		}
 
-		// Check if this is a blob URL (not accessible from server)
-		if (imageOverlay.url.startsWith('blob:')) {
+		// Check if is a blob URL
+		if (imageOverlay.url.startsWith("blob:")) {
 			// Draw a placeholder rectangle
 			ctx.save();
 			const centerX = pixels.x + pixels.width / 2;
 			const centerY = pixels.y + pixels.height / 2;
 			ctx.translate(centerX, centerY);
 			ctx.rotate((imageOverlay.angleDeg * Math.PI) / 180);
-			
-			ctx.fillStyle = 'rgba(200, 200, 200, 0.5)';
-			ctx.fillRect(-pixels.width / 2, -pixels.height / 2, pixels.width, pixels.height);
-			ctx.strokeStyle = '#999';
+
+			ctx.fillStyle = "rgba(200, 200, 200, 0.5)";
+			ctx.fillRect(
+				-pixels.width / 2,
+				-pixels.height / 2,
+				pixels.width,
+				pixels.height
+			);
+			ctx.strokeStyle = "#999";
 			ctx.lineWidth = 2;
-			ctx.strokeRect(-pixels.width / 2, -pixels.height / 2, pixels.width, pixels.height);
-			
+			ctx.strokeRect(
+				-pixels.width / 2,
+				-pixels.height / 2,
+				pixels.width,
+				pixels.height
+			);
+
 			// Add "IMAGE" text
-			ctx.fillStyle = '#666';
-			ctx.font = '14px Arial';
-			ctx.textAlign = 'center';
-			ctx.textBaseline = 'middle';
-			ctx.fillText('IMAGE', 0, 0);
-			
+			ctx.fillStyle = "#666";
+			ctx.font = "14px Arial";
+			ctx.textAlign = "center";
+			ctx.textBaseline = "middle";
+			ctx.fillText("IMAGE", 0, 0);
+
 			ctx.restore();
 			return;
 		}
@@ -185,22 +195,30 @@ async function renderImageOverlay(ctx: any, imageOverlay: any) {
 		const centerY = pixels.y + pixels.height / 2;
 		ctx.translate(centerX, centerY);
 		ctx.rotate((imageOverlay.angleDeg * Math.PI) / 180);
-		
-		ctx.fillStyle = 'rgba(255, 200, 200, 0.5)';
-		ctx.fillRect(-pixels.width / 2, -pixels.height / 2, pixels.width, pixels.height);
-		ctx.strokeStyle = '#f00';
+
+		ctx.fillStyle = "rgba(255, 200, 200, 0.5)";
+		ctx.fillRect(
+			-pixels.width / 2,
+			-pixels.height / 2,
+			pixels.width,
+			pixels.height
+		);
+		ctx.strokeStyle = "#f00";
 		ctx.lineWidth = 2;
-		ctx.strokeRect(-pixels.width / 2, -pixels.height / 2, pixels.width, pixels.height);
-		
+		ctx.strokeRect(
+			-pixels.width / 2,
+			-pixels.height / 2,
+			pixels.width,
+			pixels.height
+		);
+
 		// Add "ERROR" text
-		ctx.fillStyle = '#f00';
-		ctx.font = '12px Arial';
-		ctx.textAlign = 'center';
-		ctx.textBaseline = 'middle';
-		ctx.fillText('ERROR', 0, 0);
-		
+		ctx.fillStyle = "#f00";
+		ctx.font = "12px Arial";
+		ctx.textAlign = "center";
+		ctx.textBaseline = "middle";
+		ctx.fillText("ERROR", 0, 0);
+
 		ctx.restore();
 	}
 }
-
-
