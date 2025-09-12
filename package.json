@@ -11,7 +11,7 @@
   "dependencies": {
     "@heroicons/react": "^2.2.0",
     "@shopify/storefront-api-client": "^1.0.9",
-    "@supabase/supabase-js": "^2.56.0",
+    "@supabase/supabase-js": "^2.57.4",
     "bcryptjs": "^3.0.2",
     "formidable": "^3.5.4",
     "graphql-request": "^7.2.0",

@@ -213,17 +213,17 @@ export default function AdminPanelPage() {
               </span>
             </Link>
 
-            {/* Add User */}
-            <button
-              type="button"
+            {/* Add User (links to /adminpanel/create-user) */}
+            <Link
+              href="/adminpanel/create-user"
               className="group inline-flex items-center text-stone-700 hover:text-indigo-600 transition"
-              onClick={() => console.log("Add User clicked")}
+              aria-label="Add User"
             >
               <UserPlusIcon className="h-5 w-5" />
               <span className="ml-1 max-w-0 opacity-0 transition-all duration-200 ease-out group-hover:max-w-[120px] group-hover:opacity-100 whitespace-nowrap text-sm">
                 Add User
               </span>
-            </button>
+            </Link>
 
             {/* Search */}
             {!isSearchOpen ? (
