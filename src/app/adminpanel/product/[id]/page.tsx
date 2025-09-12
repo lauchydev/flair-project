@@ -421,6 +421,7 @@ export default function ProductDetailsPage() {
       setDraftDesc(data.descriptionHtml || data.description || "");
 
       // toggles + prices
+      // toggles + prices
       setCustomImage((data.ci?.value || "") === "true");
       setCustomText((data.ct?.value || "") === "true");
       setCustomColours((data.cc?.value || "") === "true");
@@ -506,12 +507,14 @@ export default function ProductDetailsPage() {
           setColourImageMap(m);
         } else {
           setColourImageMap(buildSequentialMap(list, data.images?.edges ?? []));
+          setColourImageMap(buildSequentialMap(list, data.images?.edges ?? []));
         }
       } catch {
         setColourImageMap(buildSequentialMap(list, data.images?.edges ?? []));
 >>>>>>> e3c9509 (Create Designer Account + Add Design Area)
       }
     }
+
 
     return data;
   }
@@ -731,6 +734,16 @@ export default function ProductDetailsPage() {
     return "#" + v;
   }
 
+  // Colour picking helpers
+  function normalizeHexInput(value: string): string {
+    // Remove any existing # and clean the input
+    let v = value.replace("#", "").trim().toLowerCase();
+    // Only keep valid hex characters and limit to 6 characters
+    v = v.replace(/[^0-9a-f]/g, "").slice(0, 6);
+    // Always return with # prefix
+    return "#" + v;
+  }
+
   async function pickColour() {
     // @ts-ignore
     if (window.EyeDropper) {
@@ -739,6 +752,7 @@ export default function ProductDetailsPage() {
         const eye = new window.EyeDropper();
         const result = await eye.open();
         const hex = result?.sRGBHex;
+        if (hex) setColours((prev) => Array.from(new Set([...prev, hex.toLowerCase()])));
         if (hex) setColours((prev) => Array.from(new Set([...prev, hex.toLowerCase()])));
       } catch {}
     } else {
@@ -764,10 +778,12 @@ export default function ProductDetailsPage() {
     if (!images.length) return;
     setActiveIdx((i) => (i + 1) % images.length);
     requestAnimationFrame(updateDisplayMetrics);
+    requestAnimationFrame(updateDisplayMetrics);
   }
   function prevImage() {
     if (!images.length) return;
     setActiveIdx((i) => (i - 1 + images.length) % images.length);
+    requestAnimationFrame(updateDisplayMetrics);
     requestAnimationFrame(updateDisplayMetrics);
   }
 
@@ -828,7 +844,21 @@ export default function ProductDetailsPage() {
     }
     // reset input so the same file can be picked again later
     if (fileInputRef.current) fileInputRef.current.value = "";
+
+    const { valid, invalid } = await validateFilesAre800(files);
+    if (invalid.length) {
+      const details = invalid
+        .map(i => `• ${i.name}${Number.isFinite(i.w) ? ` (${i.w}x${i.h})` : ""}`)
+        .join("\n");
+      alert(`Only 800×800 images are allowed.\n\nSkipped:\n${details}`);
+    }
+    if (valid.length) {
+      setPendingFiles((prev) => [...prev, ...valid]);
+    }
+    // reset input so the same file can be picked again later
+    if (fileInputRef.current) fileInputRef.current.value = "";
   }
+
 
   async function uploadPendingFiles() {
     if (!pendingFiles.length) return;
@@ -842,7 +872,9 @@ export default function ProductDetailsPage() {
       const updated = await loadProduct();
       const newLen = updated?.images?.edges?.length ?? 0;
       if (newLen > 0) setActiveIdx(newLen - 1);
+      if (newLen > 0) setActiveIdx(newLen - 1);
       setPendingFiles([]);
+      requestAnimationFrame(updateDisplayMetrics);
       requestAnimationFrame(updateDisplayMetrics);
     } catch (e: any) {
       alert(`Network error: ${e?.message || e}`);
@@ -877,6 +909,8 @@ export default function ProductDetailsPage() {
       let payload: any; try { payload = JSON.parse(bodyText); } catch { payload = { nonJson: true, body: bodyText }; }
 =======
         body: JSON.stringify({
+          imageId: id,
+          productId: product?.id || "",
           imageId: id,
           productId: product?.id || "",
         }),
@@ -957,6 +991,7 @@ export default function ProductDetailsPage() {
 >>>>>>> e3c9509 (Create Designer Account + Add Design Area)
   const firstVariant = product?.variants?.edges?.[0]?.node;
   const weightValue = firstVariant?.inventoryItem?.measurement?.weight?.value;
+  const weightUnit = firstVariant?.inventoryItem?.measurement?.weight?.unit;
   const weightUnit = firstVariant?.inventoryItem?.measurement?.weight?.unit;
   const weightDisplay =
     weightValue != null && weightUnit ? `${weightValue} ${String(weightUnit).toLowerCase()}` : "No weight info";
@@ -1251,6 +1286,12 @@ export default function ProductDetailsPage() {
                     Click and drag to select the design area.
                   </div>
                 )}
+
+                {designMode && (
+                  <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/60 text-white text-xs rounded px-3 py-1 whitespace-nowrap shadow">
+                    Click and drag to select the design area.
+                  </div>
+                )}
               </>
             ) : (
               <div className="text-gray-500">No images</div>
@@ -1264,6 +1305,12 @@ export default function ProductDetailsPage() {
               const thumb = node.url || node.src || "";
               return (
                 <button
+                  key={node.id || idx}
+                  onClick={() => {
+                    setActiveIdx(idx);
+                    requestAnimationFrame(updateDisplayMetrics);
+                  }}
+                  className={`border rounded overflow-hidden w-20 h-20 flex-shrink-0 ${idx === activeIdx ? "ring-2 ring-black" : ""}`}
                   key={node.id || idx}
                   onClick={() => {
                     setActiveIdx(idx);
@@ -1284,6 +1331,7 @@ export default function ProductDetailsPage() {
           </div>
 
           {/* Add images + Design Area */}
+          {/* Add images + Design Area */}
           <input
             ref={fileInputRef}
             type="file"
@@ -1293,7 +1341,9 @@ export default function ProductDetailsPage() {
             onChange={onFilesChosen}
           />
           <div className="mt-3 flex flex-wrap items-center gap-3">
+          <div className="mt-3 flex flex-wrap items-center gap-3">
             <button
+              onClick={() => fileInputRef.current?.click()}
               onClick={() => fileInputRef.current?.click()}
               className="inline-flex items-center gap-2 bg-black text-white px-4 py-2 rounded"
               type="button"
@@ -1324,9 +1374,32 @@ export default function ProductDetailsPage() {
               </>
             )}
 
+            <button
+              onClick={() => setDesignMode((v) => !v)}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded border ${designMode ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-900"}`}
+              type="button"
+              title="Select a design area (absolute 800×800)"
+            >
+              <PencilSquareIcon className="w-5 h-5" />
+              {designMode ? "Finish Design Area" : "Design Area"}
+            </button>
+
+            {designArea && (
+              <>
+                <button
+                  onClick={() => setDesignArea(null)}
+                  className="text-sm underline text-gray-600"
+                  type="button"
+                >
+                  Clear
+                </button>
+              </>
+            )}
+
             {pendingFiles.length > 0 && (
               <>
                 <span className="text-sm text-gray-600">
+                  {pendingFiles.length} file{pendingFiles.length > 1 ? "s" : ""} ready (800×800)
                   {pendingFiles.length} file{pendingFiles.length > 1 ? "s" : ""} ready (800×800)
                 </span>
                 <button
@@ -2031,6 +2104,7 @@ export default function ProductDetailsPage() {
             </div>
 
             {/* Colours list editor */}
+            {/* Colours list editor */}
             {customColours && (
               <>
                 <div className="mb-3">
@@ -2066,6 +2140,7 @@ export default function ProductDetailsPage() {
                           />
                           <input
                             type="text"
+                            value={localHexValues[idx] !== undefined ? localHexValues[idx] : hex}
                             value={localHexValues[idx] !== undefined ? localHexValues[idx] : hex}
                             onChange={(e) => {
                               const inputValue = e.target.value;
@@ -2104,8 +2179,45 @@ export default function ProductDetailsPage() {
                                 delete newState[idx];
                                 return newState;
                               });
+                              const inputValue = e.target.value;
+                              let newValue = inputValue;
+                              
+                              // Always ensure # is at the beginning
+                              if (!newValue.startsWith("#")) {
+                                newValue = "#" + newValue;
+                              }
+                              
+                              // Only allow hex characters after #
+                              newValue = newValue.replace(/[^#0-9a-fA-F]/g, "");
+                              
+                              // Limit to 7 characters total (# + 6 hex)
+                              if (newValue.length > 7) {
+                                newValue = newValue.slice(0, 7);
+                              }
+                              
+                              // Update local state
+                              setLocalHexValues(prev => ({ ...prev, [idx]: newValue }));
+                            }}
+                            onKeyDown={(e) => {
+                              // Prevent backspace from removing the #
+                              if (e.key === "Backspace" && e.currentTarget.value === "#") {
+                                e.preventDefault();
+                              }
+                            }}
+                            onBlur={() => {
+                              // Normalize and update the main state when losing focus
+                              const currentValue = localHexValues[idx] !== undefined ? localHexValues[idx] : hex;
+                              const normalized = normalizeHexInput(currentValue);
+                              setColours((prev) => prev.map((c, i) => (i === idx ? normalized : c)));
+                              // Clear local state
+                              setLocalHexValues(prev => {
+                                const newState = { ...prev };
+                                delete newState[idx];
+                                return newState;
+                              });
                             }}
                             className="w-28 px-2 py-1 border rounded text-sm"
+                            placeholder="#rrggbb"
                             placeholder="#rrggbb"
                           />
                         </div>
