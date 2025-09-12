@@ -44,7 +44,7 @@ export default function VariantOptions({
                                     onClick={() => onChange(name, value)}
                                     className={`rounded-xl border-2 px-3 py-2 text-sm font-extrabold ${
                                         active
-                                            ? "bg-purple-500 text-white border-black"
+                                            ? "bg-blue-500 text-white border-black"
                                             : "bg-white text-black border-black hover:bg-gray-50"
                                     } ${
                                         !available
