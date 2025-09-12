@@ -256,7 +256,7 @@ export default function CartPage() {
 												</p>
 												<button
 													onClick={() => handleRemoveItem(item.id)}
-													className="text-xs bg-red-600 text-white px-3 py-1 rounded-lg hover:bg-red-500 font-semibold"
+													className="text-xs bg-red-600 text-white px-3 py-1 rounded-lg hover:bg-red-500 font-semibold border-3 border-black cursor-pointer"
 													disabled={loading}
 												>
 													Remove
@@ -296,7 +296,7 @@ export default function CartPage() {
 
 							<button
 								onClick={handleCheckout}
-								className="w-full rounded-2xl border-4 border-black bg-green-600 px-6 py-4 font-black text-white hover:bg-green-500 transition-colors shadow-xl"
+								className="w-full rounded-2xl border-4 border-black bg-green-600 px-6 py-4 font-black text-white hover:bg-green-500 transition-colors shadow-xl cursor-pointer"
 							>
 								Proceed to Checkout
 							</button>
