@@ -362,10 +362,12 @@ export class ShopifyCartAPI {
 		previewImageUrl?: string
 	): Promise<Cart> {
 		// Custom attributes for cart
+		const customizationJson = JSON.stringify(customization);
+
 		const attributes: Array<{ key: string; value: string }> = [
 			{
 				key: "_customization_data",
-				value: JSON.stringify(customization),
+				value: customizationJson,
 			},
 			{
 				key: "Customization",
@@ -413,6 +415,10 @@ export class ShopifyCartAPI {
 			throw new Error(data.cartCreate.userErrors[0].message);
 		}
 
+		if (!data.cartCreate.cart) {
+			throw new Error("Create cart API returned null cart");
+		}
+
 		return data.cartCreate.cart;
 	}
 
@@ -427,10 +433,12 @@ export class ShopifyCartAPI {
 		previewImageUrl?: string
 	): Promise<Cart> {
 		// Custom attributes for cart
+		const customizationJson = JSON.stringify(customization);
+
 		const attributes: Array<{ key: string; value: string }> = [
 			{
 				key: "_customization_data",
-				value: JSON.stringify(customization),
+				value: customizationJson,
 			},
 			{
 				key: "Customization",
@@ -474,6 +482,10 @@ export class ShopifyCartAPI {
 
 		if (data.cartLinesAdd.userErrors.length > 0) {
 			throw new Error(data.cartLinesAdd.userErrors[0].message);
+		}
+
+		if (!data.cartLinesAdd.cart) {
+			throw new Error("Cart API returned null cart");
 		}
 
 		return data.cartLinesAdd.cart;

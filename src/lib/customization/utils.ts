@@ -142,14 +142,16 @@ export function generateCustomizationSummary(
 	}
 
 	// Check if any text exists
-	const hasText = customization.views.some(view => view.textOverlays.length > 0);
-	parts.push(`Custom Text: ${hasText ? 'true' : 'false'}`);
+	const hasText = customization.views.some(
+		(view) => view.textOverlays.length > 0
+	);
+	parts.push(`Custom Text: ${hasText ? "true" : "false"}`);
 
 	// Text Color (from first text overlay found)
 	if (hasText) {
 		const firstTextOverlay = customization.views
-			.flatMap(view => view.textOverlays)
-			.find(text => text);
+			.flatMap((view) => view.textOverlays)
+			.find((text) => text);
 		if (firstTextOverlay) {
 			parts.push(`Text Color: ${firstTextOverlay.color}`);
 		}
@@ -166,7 +168,7 @@ export function generateCustomizationSummary(
 
 	// Total images count
 	const totalImages = customization.views.reduce(
-		(total, view) => total + view.imageOverlays.length, 
+		(total, view) => total + view.imageOverlays.length,
 		0
 	);
 	if (totalImages > 0) {

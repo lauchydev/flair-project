@@ -71,7 +71,12 @@ export async function generatePreviewDataUrl(
 function loadImage(src: string): Promise<HTMLImageElement> {
 	return new Promise((resolve, reject) => {
 		const img = new Image();
-		img.crossOrigin = "anonymous";
+
+		// Only set crossOrigin for external URLs, not for blob URLs
+		if (!src.startsWith("blob:") && !src.startsWith("data:")) {
+			img.crossOrigin = "anonymous";
+		}
+
 		img.onload = () => resolve(img);
 		img.onerror = reject;
 		img.src = src;
@@ -136,6 +141,10 @@ async function drawImageOverlay(
 	canvasHeight: number
 ): Promise<void> {
 	try {
+		if (!imageOverlay.url) {
+			return;
+		}
+
 		const image = await loadImage(imageOverlay.url);
 
 		const pixels = convertPercentToPixels(
@@ -162,7 +171,39 @@ async function drawImageOverlay(
 
 		ctx.restore();
 	} catch (error) {
-		console.error("Failed to load image overlay:", error);
+		// Draw a placeholder rectangle on error
+		const pixels = convertPercentToPixels(
+			imageOverlay.x - imageOverlay.widthPercent / 2,
+			imageOverlay.y - imageOverlay.heightPercent / 2,
+			imageOverlay.widthPercent,
+			imageOverlay.heightPercent
+		);
+
+		const x = (pixels.x / 800) * canvasWidth;
+		const y = (pixels.y / 800) * canvasHeight;
+		const width = (pixels.width / 800) * canvasWidth;
+		const height = (pixels.height / 800) * canvasHeight;
+
+		ctx.save();
+		ctx.translate(x + width / 2, y + height / 2);
+		ctx.rotate((imageOverlay.angleDeg * Math.PI) / 180);
+
+		// Draw error placeholder
+		ctx.fillStyle = "rgba(255, 200, 200, 0.8)";
+		ctx.fillRect(-width / 2, -height / 2, width, height);
+		ctx.strokeStyle = "#f00";
+		ctx.lineWidth = 2;
+		ctx.strokeRect(-width / 2, -height / 2, width, height);
+
+		// Add "IMAGE ERROR" text
+		ctx.fillStyle = "#f00";
+		ctx.font = "12px Arial";
+		ctx.textAlign = "center";
+		ctx.textBaseline = "middle";
+		ctx.fillText("IMAGE", 0, -6);
+		ctx.fillText("ERROR", 0, 6);
+
+		ctx.restore();
 	}
 }
 
@@ -184,7 +225,7 @@ export async function generateThumbnail(
 }
 
 /**
- * Create a high-quality preview for order details
+ * Create a preview for order details
  */
 export async function generateOrderPreview(
 	customization: ProductCustomization,
