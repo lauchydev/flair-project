@@ -56,7 +56,6 @@ export interface CartCustomAttributes {
 	_customization_data: string; // Hidden serialized ProductCustomization
 	Customization: string; // User-friendly customization summary
 	_custom_price: string; // Hidden formatted price display
-	_admin_data: string; // Hidden admin description
 	_preview_image_url?: string; // Hidden preview image
 	_custom_color?: string; // Hidden color data
 	_has_customization: string;
