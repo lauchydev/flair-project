@@ -33,7 +33,7 @@ export default function ColorPicker({
                         onClick={() => onSelect(color)}
                         className={`h-8 w-8 rounded-full border-2 border-black shadow transition-all ${
                             selectedColor === color
-                                ? "ring-4 ring-purple-400 scale-110"
+                                ? "ring-2 ring-blue-500 scale-110"
                                 : "hover:scale-105"
                         }`}
                         style={{ backgroundColor: color }}

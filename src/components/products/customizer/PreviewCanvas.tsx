@@ -489,16 +489,17 @@ export default function PreviewCanvas({
             )}
 
             {/* Render additional images beneath active (non-interactive) */}
-            {otherImages.map((img, key) => (
-                <ImageOverlay
-                    key={`static-${key}`}
-                    url={img.url}
-                    pos={{ x: img.x, y: img.y }}
-                    sizePct={{ w: img.widthPercent, h: img.heightPercent }}
-                    angleDeg={img.angleDeg}
-                    zIndex={5}
-                />
-            ))}
+            {!designArea &&
+                otherImages.map((img, key) => (
+                    <ImageOverlay
+                        key={`static-${key}`}
+                        url={img.url}
+                        pos={{ x: img.x, y: img.y }}
+                        sizePct={{ w: img.widthPercent, h: img.heightPercent }}
+                        angleDeg={img.angleDeg}
+                        zIndex={5}
+                    />
+                ))}
 
             {uploadedImageUrl && (
                 <div onPointerDown={onPointerDown("image")}>
@@ -518,6 +519,7 @@ export default function PreviewCanvas({
                             !!onImageWidthPercentChange &&
                             !!onImageHeightPercentChange
                         }
+                        hideContent={!!designArea}
                         onResize={(h, e) => startResize("image", h, e)}
                         onRotateStart={
                             onImageAngleDegChange

@@ -14,6 +14,7 @@ interface ImageOverlayProps {
     cursor?: string;
     interactive?: boolean;
     designAreaMirrored?: boolean;
+    hideContent?: boolean;
     onResize?: (
         handle: "nw" | "ne" | "sw" | "se",
         e: React.PointerEvent<HTMLDivElement>
@@ -32,6 +33,7 @@ const ImageOverlay = forwardRef<HTMLDivElement, ImageOverlayProps>(
             cursor = "default",
             interactive = false,
             designAreaMirrored = false,
+            hideContent = false,
             onResize,
             onRotateStart,
         },
@@ -63,7 +65,9 @@ const ImageOverlay = forwardRef<HTMLDivElement, ImageOverlayProps>(
                     src={url}
                     alt="Overlay"
                     fill
-                    className={`object-contain ${designAreaMirrored ? "" : ""}`}
+                    className={`object-contain ${
+                        hideContent ? "invisible" : ""
+                    } ${designAreaMirrored ? "" : ""}`}
                     sizes="96px"
                 />
                 {interactive && onResize && (

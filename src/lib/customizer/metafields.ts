@@ -61,31 +61,61 @@ export function parsePriceModifier(value: string | null | undefined): number {
     return isNaN(parsed) ? 0 : Math.max(0, parsed);
 }
 
-// Percent rect parser: accepts either a single rect or a map of view->rect
-export type PercentRect = {
+// Pixel rect parser: accepts either a single rect or a map of view->rect
+export type PixelRect = {
     x: number;
     y: number;
     width: number;
     height: number;
 };
 
+type RectLike = { x: unknown; y: unknown; width: unknown; height: unknown };
+
+/**
+ * Clamp a rect within an 800x800 canvas (pixel space).
+ */
+function clampRectToCanvasPx(r: RectLike): PixelRect | null {
+    const isNum = (n: unknown): n is number =>
+        typeof n === "number" && isFinite(n);
+    if (
+        !r ||
+        !isNum(r.x) ||
+        !isNum(r.y) ||
+        !isNum(r.width) ||
+        !isNum(r.height)
+    ) {
+        return null;
+    }
+
+    const CANVAS_PX = 800;
+    const clampPx = (v: number) => Math.max(0, Math.min(CANVAS_PX, v));
+
+    const x = clampPx(r.x);
+    const y = clampPx(r.y);
+    let width = clampPx(r.width);
+    let height = clampPx(r.height);
+
+    if (x + width > CANVAS_PX) width = CANVAS_PX - x;
+    if (y + height > CANVAS_PX) height = CANVAS_PX - y;
+
+    return { x, y, width, height };
+}
+
 export function parseDesignAreaMetafield(
     value: string | null | undefined
-): PercentRect | Record<string, PercentRect> | null {
+): PixelRect | Record<string, PixelRect> | null {
     if (!value || !value.trim()) return null;
     try {
         const obj = JSON.parse(value);
-        const isRect = (r: any) =>
-            r &&
-            typeof r.x === "number" &&
-            typeof r.y === "number" &&
-            typeof r.width === "number" &&
-            typeof r.height === "number";
-        if (isRect(obj)) return obj as PercentRect;
-        if (obj && typeof obj === "object") {
-            const out: Record<string, PercentRect> = {};
-            for (const k of Object.keys(obj)) {
-                if (isRect(obj[k])) out[k] = obj[k];
+        const rect = clampRectToCanvasPx(obj as RectLike);
+        if (rect) return rect;
+
+        if (obj && typeof obj === "object" && !Array.isArray(obj)) {
+            const out: Record<string, PixelRect> = {};
+            const rec = obj as Record<string, unknown>;
+            for (const k of Object.keys(rec)) {
+                const maybe = clampRectToCanvasPx(rec[k] as RectLike);
+                if (maybe) out[k] = maybe;
             }
             return Object.keys(out).length ? out : null;
         }
