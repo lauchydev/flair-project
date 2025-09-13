@@ -50,6 +50,8 @@ export default function Header() {
 		};
 	}, []);
 
+	// TODO: Give the header a bit of a design overhaul
+
 	return (
 		<header className="bg-white shadow-sm">
 			<div className="container mx-auto px-4 py-4">
