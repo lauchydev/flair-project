@@ -1,25 +1,41 @@
-import Footer from "@/components/layout/Footer";
 import Header from "@/components/layout/Header";
-import Hero from "@/components/layout/Hero";
-import { Metadata } from "next";
+import Footer from "@/components/layout/Footer";
+
+import Hero from "@/components/landing/Hero";
+import ValueRibbon from "@/components/landing/ValueRibbon";
+import Features from "@/components/landing/Features";
+import SocialProof from "@/components/landing/SocialProof";
+import CTA from "@/components/landing/CTA";
+
+import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Flair | Home",
-  description: "Customise and create your own products",
+  description: "Custom products you can design in minutes.",
+  openGraph: {
+    title: "Flair — Create your own dreams",
+    description: "Design custom products fast with Flair.",
+    url: "https://your-domain.example/", // replace when you have it
+    siteName: "Flair",
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Flair" }],
+    type: "website",
+  },
 };
+
 export default function Home() {
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen bg-lime-200">
       <Header />
-      <main className="flex-grow">
+      <main>
         <Hero />
-        <div className="flex flex-col items-center justify-center">
-          <h1 className="text-4xl font-bold text-center bg-white text-black">
-            Landing Page
-          </h1>
-        </div>
+        <ValueRibbon />
+        <Features />
+        {/* Remove SocialProof if you don’t want it yet */}
+        <SocialProof />
+        <CTA />
       </main>
       <Footer />
     </div>
   );
 }
+
