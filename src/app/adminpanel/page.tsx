@@ -13,8 +13,6 @@ import {
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 
-// If your tsconfig has "@/components" path alias, keep this import.
-// Otherwise change to a relative path like: "../../components/layout/LogoutButton"
 import LogoutButton from "@/components/layout/LogoutButton";
 
 type ImageNode = {
@@ -44,16 +42,15 @@ export default function AdminPanelPage() {
   const { user } = useUser();
   const currentUser = user?.email || "";
   const currentUserRole =user?.role || "";
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadProducts() {
       try {
-        // Avoid cached HTML/data while developing
         const res = await fetch("/api/get-products", { cache: "no-store" });
         const data = await res.json();
-        // Extract productOwner from metafields
         const productsWithOwner = (data || []).map((p: any) => ({
           ...p,
           productOwner: p.productOwner?.value || ""
@@ -67,13 +64,39 @@ export default function AdminPanelPage() {
       }
     }
 
+
     loadProducts();
     return () => {
       cancelled = true;
     };
   }, []);
 
-  // focus input when opening search
+  async function onDeleteProduct(e: React.MouseEvent, product: Product) {
+    e.stopPropagation(); 
+    const ok = window.confirm(`Are you sure you want to delete “${product.title}”? This cannot be undone.`);
+    if (!ok) return;
+
+    try {
+      setDeletingId(product.id);
+      const res = await fetch("/api/delete-product", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: product.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data?.error || "Failed to delete product");
+        return;
+      }
+      setProducts(prev => prev.filter(p => p.id !== product.id));
+    } catch (err: any) {
+      alert(err?.message || "Network error");
+    } finally {
+      setDeletingId(null);
+    }
+
+  }
+
   useEffect(() => {
     if (isSearchOpen) {
       const t = setTimeout(() => searchInputRef.current?.focus(), 50);
@@ -160,15 +183,14 @@ export default function AdminPanelPage() {
               </div>
 
               <button
-                className="absolute right-2 top-2 rounded-full bg-stone-50/90 p-1.5 backdrop-blur ring-1 ring-black/10 opacity-0 transition group-hover:opacity-100 hover:bg-stone-100"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  console.log("Delete product", product.id);
-                }}
+                className="absolute right-2 top-2 rounded-full bg-stone-50/90 p-1.5 backdrop-blur ring-1 ring-black/10 opacity-0 transition group-hover:opacity-100 hover:bg-stone-100 disabled:opacity-60"
+                onClick={(e) => onDeleteProduct(e, product)}
                 aria-label="Delete product"
+                disabled={deletingId === product.id}
               >
                 <TrashIcon className="h-4 w-4 text-stone-600 hover:text-rose-500" />
               </button>
+
             </li>
           );
         })}
@@ -213,7 +235,7 @@ export default function AdminPanelPage() {
               </span>
             </Link>
 
-            {/* Add User (links to /adminpanel/create-user) */}
+            {/* Add User */}
             <Link
               href="/adminpanel/create-user"
               className="group inline-flex items-center text-stone-700 hover:text-indigo-600 transition"

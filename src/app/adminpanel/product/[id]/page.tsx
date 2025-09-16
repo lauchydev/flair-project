@@ -14,6 +14,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   TrashIcon,
+  ArrowUpTrayIcon,
 } from "@heroicons/react/24/outline";
 
 type ImageNode = {
@@ -50,20 +51,18 @@ type Product = {
   images?: { edges: { node: ImageNode }[] };
   variants?: { edges: { node: VariantNode }[] };
 
-  // metafields
-  ci?:   { id?: string | null; type: string; value: string | null };
-  ct?:   { id?: string | null; type: string; value: string | null };
-  cc?:   { id?: string | null; type: string; value: string | null };
-  ca?:   { id?: string | null; type: string; value: string | null }; // JSON array of hex strings
-  cim?:  { id?: string | null; type: string; value: string | null }; // JSON ColourImageMap (optional)
+  ci?: { id?: string | null; type: string; value: string | null };
+  ct?: { id?: string | null; type: string; value: string | null };
+  cc?: { id?: string | null; type: string; value: string | null };
+  ca?: { id?: string | null; type: string; value: string | null };
+  cim?: { id?: string | null; type: string; value: string | null };
   cipv?: { id?: string | null; type: string; value: string | null };
   ctpv?: { id?: string | null; type: string; value: string | null };
   ccpv?: { id?: string | null; type: string; value: string | null };
-  po?:   { id?: string | null; type: string; value: string | null }; // product_owner (optional)
-  da?:   { id?: string | null; type: string; value: string | null }; // JSON {x,y,width,height} in 0..800
+  po?: { id?: string | null; type: string; value: string | null };
+  da?: { id?: string | null; type: string; value: string | null };
 };
 
-// --- Design area is absolute within a virtual 800x800 canvas
 const CANVAS_SIZE = 800;
 type RectAbs = { x: number; y: number; width: number; height: number } | null;
 
@@ -105,14 +104,14 @@ export default function ProductDetailsPage() {
   const [productOwner, setProductOwner] = useState("");
 
   // Colours + mapping
-  const [colours, setColours] = useState<string[]>([]); // #RRGGBB (lowercase allowed)
+  const [colours, setColours] = useState<string[]>([]);
   const [selectedColour, setSelectedColour] = useState<string | null>(null);
   const [colourImageMap, setColourImageMap] = useState<ColourImageMap>({});
 
-  // Local hex edit buffer to allow free typing before validation on blur
+  // Local hex edit buffer
   const [localHexValues, setLocalHexValues] = useState<Record<number, string>>({});
 
-  // Design area (absolute 0..800)
+  // Design area
   const [designArea, setDesignArea] = useState<RectAbs>(null);
   const [designMode, setDesignMode] = useState(false);
 
@@ -128,12 +127,12 @@ export default function ProductDetailsPage() {
   const titleInputRef = useRef<HTMLInputElement>(null);
   const descTextareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Display box metrics for overlay + drag coords
+  // Display metrics
   const containerRef = useRef<HTMLDivElement | null>(null);
   const imgElRef = useRef<HTMLImageElement | null>(null);
   const [displaySize, setDisplaySize] = useState<{ w: number; h: number; left: number; top: number } | null>(null);
 
-  // User context for product owner list (optional)
+  // User context
   const { user } = useUser();
   const currentUserRole = user?.role || "";
   const [designeremails, setDesignerEmails] = useState<string[]>([]);
@@ -160,22 +159,17 @@ export default function ProductDetailsPage() {
     return product.description || "";
   }, [product]);
 
-  // Measure container
   const updateDisplayMetrics = () => {
     const el = containerRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    const next = {
+    setDisplaySize({
       w: rect.width,
       h: rect.height,
       left: rect.left + window.scrollX,
       top: rect.top + window.scrollY,
-    };
-    setDisplaySize((prev) =>
-      prev && prev.w === next.w && prev.h === next.h && prev.left === next.left && prev.top === next.top ? prev : next
-    );
+    });
   };
-
   useEffect(() => {
     const onWin = () => updateDisplayMetrics();
     window.addEventListener("resize", onWin);
@@ -187,9 +181,8 @@ export default function ProductDetailsPage() {
     };
   }, []);
 
-  // Drag to set design area in ABSOLUTE 800x800 coordinates
+  // Drag for design area
   const draggingRef = useRef<null | { startX: number; startY: number }>(null);
-
   function screenToAbsolute(clientX: number, clientY: number) {
     if (!displaySize) return null;
     const relX = clientX - displaySize.left;
@@ -202,22 +195,12 @@ export default function ProductDetailsPage() {
       y: Math.max(0, Math.min(CANVAS_SIZE, relY * scaleY)),
     };
   }
-
   function clampRectAbs(r: RectAbs): RectAbs {
     if (!r) return r;
     const clamp = (v: number) => Math.max(0, Math.min(CANVAS_SIZE, v));
-    const x = clamp(r.x);
-    const y = clamp(r.y);
-    const w = Math.max(0, clamp(r.width));
-    const h = Math.max(0, clamp(r.height));
-    return {
-      x,
-      y,
-      width: Math.min(w, CANVAS_SIZE - x),
-      height: Math.min(h, CANVAS_SIZE - y),
-    };
+    const x = clamp(r.x), y = clamp(r.y), w = Math.max(0, clamp(r.width)), h = Math.max(0, clamp(r.height));
+    return { x, y, width: Math.min(w, CANVAS_SIZE - x), height: Math.min(h, CANVAS_SIZE - y) };
   }
-
   function onDesignMouseDown(e: React.MouseEvent) {
     if (!designMode) return;
     e.preventDefault();
@@ -225,7 +208,6 @@ export default function ProductDetailsPage() {
     const p = screenToAbsolute(e.clientX, e.clientY);
     if (p) setDesignArea({ x: p.x, y: p.y, width: 1, height: 1 });
   }
-
   function onDesignMouseMove(e: React.MouseEvent) {
     if (!designMode || !draggingRef.current || !designArea) return;
     e.preventDefault();
@@ -239,31 +221,32 @@ export default function ProductDetailsPage() {
     const h = Math.abs(p2.y - p1.y);
     setDesignArea(clampRectAbs({ x, y, width: w, height: h }));
   }
-
   function onDesignMouseUp() {
     if (!designMode) return;
     draggingRef.current = null;
   }
 
-  // Helpers
   function getImageById(imageId?: string | null): ImageNode | null {
     if (!imageId) return null;
     const edge = images.find((e) => e.node.id === imageId);
     return edge?.node || null;
   }
-
   function buildSequentialMap(cList: string[], imgEdges: { node: ImageNode }[]): ColourImageMap {
-    // image order: [c0.front, c0.back, c1.front, c1.back, ...]
     const map: ColourImageMap = {};
     for (let i = 0; i < cList.length; i++) {
       const frontEdge = imgEdges[2 * i];
       const backEdge = imgEdges[2 * i + 1];
-      map[cList[i]] = {
-        front: frontEdge?.node?.id ?? null,
-        back: backEdge?.node?.id ?? null,
-      };
+      map[cList[i]] = { front: frontEdge?.node?.id ?? null, back: backEdge?.node?.id ?? null };
     }
     return map;
+  }
+  function findColourBadgeForImage(imageId?: string | null): { hex: string; side: "front" | "back" } | null {
+    if (!imageId) return null;
+    for (const [hex, sides] of Object.entries(colourImageMap)) {
+      if (sides.front === imageId) return { hex, side: "front" };
+      if (sides.back === imageId) return { hex, side: "back" };
+    }
+    return null;
   }
 
   // Load product
@@ -273,11 +256,8 @@ export default function ProductDetailsPage() {
     setProduct(data);
 
     if (data) {
-      // text
       setDraftTitle(data.title);
       setDraftDesc(data.descriptionHtml || data.description || "");
-
-      // toggles + prices
       setCustomImage((data.ci?.value || "") === "true");
       setCustomText((data.ct?.value || "") === "true");
       setCustomColours((data.cc?.value || "") === "true");
@@ -286,7 +266,6 @@ export default function ProductDetailsPage() {
       setCustomColoursPrice(data.ccpv?.value || "0");
       setProductOwner(data.po?.value || "");
 
-      // first variant defaults
       const firstVariant = data.variants?.edges?.[0]?.node;
       if (firstVariant) {
         setDraftSku(firstVariant.sku ?? "");
@@ -294,9 +273,9 @@ export default function ProductDetailsPage() {
         setDraftStock(firstVariant.inventoryQuantity != null ? String(firstVariant.inventoryQuantity) : "");
         const weightValue = firstVariant.inventoryItem?.measurement?.weight?.value;
         setDraftWeight(weightValue != null ? String(weightValue) : "");
+        setDraftPrice(firstVariant.price ?? "");
       }
 
-      // colours
       let list: string[] = [];
       try {
         const arr = data.ca?.value ? JSON.parse(data.ca.value) : [];
@@ -307,33 +286,21 @@ export default function ProductDetailsPage() {
       setColours(list);
       if (!selectedColour && list.length) setSelectedColour(list[0]);
 
-      // colour image map (prefer metafield, else derive sequentially)
       try {
         const m = data.cim?.value ? (JSON.parse(data.cim.value) as ColourImageMap) : null;
-        if (m && typeof m === "object") {
-          setColourImageMap(m);
-        } else {
-          setColourImageMap(buildSequentialMap(list, data.images?.edges ?? []));
-        }
+        if (m && typeof m === "object") setColourImageMap(m);
+        else setColourImageMap(buildSequentialMap(list, data.images?.edges ?? []));
       } catch {
         setColourImageMap(buildSequentialMap(list, data.images?.edges ?? []));
       }
 
-      // design area: read absolute 0..800
       try {
         const raw = data.da?.value ? JSON.parse(data.da.value) : null;
         if (raw && typeof raw === "object") {
           const clamp800 = (v: any) => Math.max(0, Math.min(CANVAS_SIZE, Number(v) || 0));
-          const abs = {
-            x: clamp800(raw.x),
-            y: clamp800(raw.y),
-            width: clamp800(raw.width),
-            height: clamp800(raw.height),
-          };
+          const abs = { x: clamp800(raw.x), y: clamp800(raw.y), width: clamp800(raw.width), height: clamp800(raw.height) };
           setDesignArea(clampRectAbs(abs));
-        } else {
-          setDesignArea(null);
-        }
+        } else setDesignArea(null);
       } catch {
         setDesignArea(null);
       }
@@ -341,7 +308,6 @@ export default function ProductDetailsPage() {
     return data;
   }
 
-  // Effects
   useEffect(() => {
     if (!productId) return;
     (async () => {
@@ -353,32 +319,22 @@ export default function ProductDetailsPage() {
         setLoading(false);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productId]);
 
-  useEffect(() => {
-    if (editingTitle) titleInputRef.current?.focus();
-  }, [editingTitle]);
-  useEffect(() => {
-    if (editingDesc) descTextareaRef.current?.focus();
-  }, [editingDesc]);
+  useEffect(() => { if (editingTitle) titleInputRef.current?.focus(); }, [editingTitle]);
+  useEffect(() => { if (editingDesc)  descTextareaRef.current?.focus(); }, [editingDesc]);
 
-  // Recompute sequential map when colours/images change, preserving known ids
+  // recompute mapping when colours/images change
   useEffect(() => {
-    if (!colours.length) {
-      setColourImageMap({});
-      return;
-    }
+    if (!colours.length) { setColourImageMap({}); return; }
     setColourImageMap((prev) => {
       const seq = buildSequentialMap(colours, images);
       const merged: ColourImageMap = {};
       for (const c of colours) {
-        merged[c] = {
-          front: prev[c]?.front ?? seq[c]?.front ?? null,
-          back: prev[c]?.back ?? seq[c]?.back ?? null,
-        };
+        merged[c] = { front: prev[c]?.front ?? seq[c]?.front ?? null, back: prev[c]?.back ?? seq[c]?.back ?? null };
       }
       return merged;
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     });
   }, [colours, images]);
 
@@ -388,160 +344,123 @@ export default function ProductDetailsPage() {
     const variantId = product.variants?.edges?.[0]?.node?.id;
     try {
       const res = await fetch("/api/update-product", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: productId, variantId, price: draftPrice }),
       });
       const text = await res.text();
-      let json: any;
-      try { json = JSON.parse(text); } catch { json = { parseError: true, body: text }; }
+      let json: any; try { json = JSON.parse(text); } catch { json = { parseError: true, body: text }; }
       if (!res.ok) return alert(json?.error || "Failed to update price");
-      await loadProduct();
-      setEditingPrice(false);
+      await loadProduct(); setEditingPrice(false);
     } catch (e: any) { alert(`Network error: ${e?.message || e}`); }
   }
-
   async function saveTitle() {
     if (!product) return;
     try {
       const res = await fetch("/api/update-product", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: productId, title: draftTitle }),
       });
       const text = await res.text();
-      let json: any;
-      try { json = JSON.parse(text); } catch { json = { parseError: true, body: text }; }
+      let json: any; try { json = JSON.parse(text); } catch { json = { parseError: true, body: text }; }
       if (!res.ok) return alert(json?.error || "Failed to update title");
-      setProduct(json as Product);
-      setEditingTitle(false);
+      setProduct(json as Product); setEditingTitle(false);
     } catch (e: any) { alert(`Network error: ${e?.message || e}`); }
   }
-
   async function saveDescription() {
     if (!product) return;
     try {
       const res = await fetch("/api/update-product", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: productId, descriptionHtml: draftDesc }),
       });
       const text = await res.text();
-      let json: any;
-      try { json = JSON.parse(text); } catch { json = { parseError: true, body: text }; }
+      let json: any; try { json = JSON.parse(text); } catch { json = { parseError: true, body: text }; }
       if (!res.ok) return alert(json?.error || "Failed to update description");
-      setProduct(json as Product);
-      setEditingDesc(false);
+      setProduct(json as Product); setEditingDesc(false);
     } catch (e: any) { alert(`Network error: ${e?.message || e}`); }
   }
-
   async function saveSku() {
     if (!product) return;
     const variantId = editingSkuId || product.variants?.edges?.[0]?.node?.id;
     if (!variantId) return;
     try {
       const res = await fetch("/api/update-product", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: productId, variantId, sku: draftSku }),
       });
       const text = await res.text();
-      let json: any;
-      try { json = JSON.parse(text); } catch { json = { parseError: true, body: text }; }
+      let json: any; try { json = JSON.parse(text); } catch { json = { parseError: true, body: text }; }
       if (!res.ok) return alert(json?.error || "Failed to update SKU");
-      await loadProduct();
-      setEditingSkuId(null);
+      await loadProduct(); setEditingSkuId(null);
     } catch (e: any) { alert(`Network error: ${e?.message || e}`); }
   }
-
   async function saveBarcode() {
     if (!product) return;
     const variantId = editingBarcodeId || product.variants?.edges?.[0]?.node?.id;
     if (!variantId) return;
     try {
       const res = await fetch("/api/update-product", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: productId, variantId, barcode: draftBarcode }),
       });
       const text = await res.text();
-      let json: any;
-      try { json = JSON.parse(text); } catch { json = { parseError: true, body: text }; }
+      let json: any; try { json = JSON.parse(text); } catch { json = { parseError: true, body: text }; }
       if (!res.ok) return alert(json?.error || "Failed to update barcode");
-      await loadProduct();
-      setEditingBarcodeId(null);
+      await loadProduct(); setEditingBarcodeId(null);
     } catch (e: any) { alert(`Network error: ${e?.message || e}`); }
   }
-
   async function saveStock() {
     if (!product) return;
     const variantId = editingStock || product.variants?.edges?.[0]?.node?.id;
     if (!variantId) return;
     try {
       const res = await fetch("/api/update-product", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: productId, variantId, inventoryQuantity: draftStock }),
       });
       const text = await res.text();
-      let json: any;
-      try { json = JSON.parse(text); } catch { json = { parseError: true, body: text }; }
+      let json: any; try { json = JSON.parse(text); } catch { json = { parseError: true, body: text }; }
       if (!res.ok) return alert(json?.error || "Failed to update stock");
-      await loadProduct();
-      setEditingStock(null);
+      await loadProduct(); setEditingStock(null);
     } catch (e: any) { alert(`Network error: ${e?.message || e}`); }
   }
-
   async function saveWeight() {
     if (!product) return;
     const variantId = product.variants?.edges?.[0]?.node?.id;
     if (!variantId) return;
     try {
       const res = await fetch("/api/update-product", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: productId, variantId, weight: draftWeight }),
       });
       const text = await res.text();
-      let json: any;
-      try { json = JSON.parse(text); } catch { json = { parseError: true, body: text }; }
+      let json: any; try { json = JSON.parse(text); } catch { json = { parseError: true, body: text }; }
       if (!res.ok) return alert(json?.error || "Failed to update weight");
-      await loadProduct();
-      setEditingWeight(false);
+      await loadProduct(); setEditingWeight(false);
     } catch (e: any) { alert(`Network error: ${e?.message || e}`); }
   }
 
-  // Save metafields (includes designArea as ABSOLUTE box)
+  // Save Options (metafields)
   async function handleSaveMetafields() {
     if (!product) return;
     try {
       const res = await fetch("/api/update-metafields", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: productId,
-          customImage,
-          customText,
-          customColours,
-          colours,
-          colourImageMap, // harmless if API ignores
-          customImagePrice,
-          customTextPrice,
-          customColoursPrice,
+          customImage, customText, customColours,
+          colours, colourImageMap,
+          customImagePrice, customTextPrice, customColoursPrice,
           productOwner: productOwner === "" ? "None@Set.test" : productOwner,
-          designArea: designArea ? { x: Math.round(designArea.x), y: Math.round(designArea.y), width: Math.round(designArea.width), height: Math.round(designArea.height) } : null,
+          designArea: designArea
+            ? { x: Math.round(designArea.x), y: Math.round(designArea.y), width: Math.round(designArea.width), height: Math.round(designArea.height) }
+            : null,
         }),
       });
       const text = await res.text();
-      let json: any;
-      try { json = JSON.parse(text); } catch { json = { parseError: true, body: text }; }
+      let json: any; try { json = JSON.parse(text); } catch { json = { parseError: true, body: text }; }
       if (!res.ok) {
-        const msg =
-          json?.error ||
-          json?.userErrors?.[0]?.message ||
-          json?.raw?.errors?.[0]?.message ||
-          json?.rawText ||
-          "Unknown error";
+        const msg = json?.error || json?.userErrors?.[0]?.message || json?.raw?.errors?.[0]?.message || json?.rawText || "Unknown error";
         return alert(`Save failed:\n${msg}`);
       }
       await loadProduct();
@@ -557,19 +476,11 @@ export default function ProductDetailsPage() {
     v = v.replace(/[^0-9a-f]/g, "").slice(0, 6);
     return "#" + v;
   }
-
   function handleHexInputChange(e: React.ChangeEvent<HTMLInputElement>, idx: number) {
     let value = e.target.value;
-
-    // Always ensure it starts with "#"
     if (!value.startsWith("#")) value = "#" + value.replace(/#/g, "");
-
-    // Only allow hex after "#"
     value = value.replace(/[^#0-9a-fA-F]/g, "");
-
-    // Limit to 7 total (# + 6 hex)
     if (value.length > 7) value = value.slice(0, 7);
-
     setLocalHexValues((prev) => ({ ...prev, [idx]: value }));
   }
 
@@ -610,59 +521,14 @@ export default function ProductDetailsPage() {
     requestAnimationFrame(updateDisplayMetrics);
   }
 
-  // Upload: only allow 800x800 images
-  function getImageSize(file: File): Promise<{ w: number; h: number }> {
-    return new Promise((resolve, reject) => {
-      const url = URL.createObjectURL(file);
-      const img = new Image();
-      img.onload = () => {
-        const w = img.naturalWidth;
-        const h = img.naturalHeight;
-        URL.revokeObjectURL(url);
-        resolve({ w, h });
-      };
-      img.onerror = (e) => {
-        URL.revokeObjectURL(url);
-        reject(e);
-      };
-      img.src = url;
-    });
-  }
-
-  async function validateFilesAre800(files: File[]): Promise<{ valid: File[]; invalid: { name: string; w: number; h: number }[] }> {
-    const results = await Promise.all(
-      files.map(async (f) => {
-        try {
-          const { w, h } = await getImageSize(f);
-          return { file: f, ok: w === 800 && h === 800, w, h };
-        } catch {
-          return { file: f, ok: false, w: NaN, h: NaN };
-        }
-      })
-    );
-    const valid = results.filter((r) => r.ok).map((r) => r.file);
-    const invalid = results.filter((r) => !r.ok).map((r) => ({ name: r.file.name, w: r.w, h: r.h }));
-    return { valid, invalid };
-  }
-
+  // Upload
   async function onFilesChosen(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files ? Array.from(e.target.files) : [];
     if (!files.length) return;
 
-    const { valid, invalid } = await validateFilesAre800(files);
-    if (invalid.length) {
-      const details = invalid.map((i) => `• ${i.name}${Number.isFinite(i.w) ? ` (${i.w}x${i.h})` : ""}`).join("\n");
-      alert(`Only 800×800 images are allowed.\n\nSkipped:\n${details}`);
-    }
-    if (valid.length) {
-      setPendingFiles((prev) => [...prev, ...valid]);
-    }
-    // reset input so the same file can be picked again later
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  }
+    setPendingFiles((prev) => [...prev, ...files]);
 
-  function openFilePicker() {
-    fileInputRef.current?.click();
+    if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   async function uploadPendingFiles() {
@@ -671,13 +537,16 @@ export default function ProductDetailsPage() {
       const fd = new FormData();
       fd.append("productId", productId);
       pendingFiles.forEach((f) => fd.append("files", f));
+
       const res = await fetch("/api/upload-product-images", { method: "POST", body: fd });
       const data = await res.json();
+
       if (!res.ok) return alert(data?.error || "Upload failed");
 
       const updated = await loadProduct();
       const newLen = updated?.images?.edges?.length ?? 0;
       if (newLen > 0) setActiveIdx(newLen - 1);
+
       setPendingFiles([]);
       requestAnimationFrame(updateDisplayMetrics);
     } catch (e: any) {
@@ -686,6 +555,7 @@ export default function ProductDetailsPage() {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
+
 
   // Delete current image
   async function deleteCurrentImage() {
@@ -696,23 +566,18 @@ export default function ProductDetailsPage() {
     setDeletingImage(true);
     try {
       const res = await fetch("/api/delete-product-image", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageId: id, productId: product?.id || "" }),
       });
-
       const bodyText = await res.text();
-      let payload: any;
-      try { payload = JSON.parse(bodyText); } catch { payload = { nonJson: true, body: bodyText }; }
-
+      let payload: any; try { payload = JSON.parse(bodyText); } catch { payload = { nonJson: true, body: bodyText }; }
       if (!res.ok) {
         const msg =
           payload?.error ||
           payload?.raw?.errors?.[0]?.message ||
           payload?.raw?.data?.productDeleteMedia?.userErrors?.[0]?.message ||
           payload?.raw?.data?.productImageDelete?.userErrors?.[0]?.message ||
-          payload?.body ||
-          `HTTP ${res.status}`;
+          payload?.body || `HTTP ${res.status}`;
         console.error("[delete] failed payload:", payload);
         alert(`Failed to delete image\n\nID: ${id}\n${msg}`);
         return;
@@ -729,7 +594,6 @@ export default function ProductDetailsPage() {
     }
   }
 
-  // Overlay rect in CSS pixels derived from ABSOLUTE 800x800 area
   const overlayRect = useMemo(() => {
     if (!designArea || !displaySize) return null;
     const scaleX = displaySize.w / CANVAS_SIZE;
@@ -742,851 +606,791 @@ export default function ProductDetailsPage() {
     };
   }, [designArea, displaySize]);
 
-  // Variant weight (display)
   const firstVariant = product?.variants?.edges?.[0]?.node;
   const weightValue = firstVariant?.inventoryItem?.measurement?.weight?.value;
   const weightUnit = firstVariant?.inventoryItem?.measurement?.weight?.unit;
   const weightDisplay =
     weightValue != null && weightUnit ? `${weightValue} ${String(weightUnit).toLowerCase()}` : "No weight info";
 
-  if (loading) return <p className="p-6">Loading...</p>;
-  if (!product) return <p className="p-6">Product not found</p>;
+  if (loading) return <p className="p-6 text-stone-600">Loading...</p>;
+  if (!product) return <p className="p-6 text-stone-600">Product not found</p>;
 
   const primaryUrl = activeImage?.url || activeImage?.src || null;
   const primaryAlt = activeImage?.altText || product?.title || "Product image";
+  const mainBadge = findColourBadgeForImage(activeImage?.id);
+
+  // shared icon+hover text button
+  const IconAction: React.FC<React.PropsWithChildren<{ title: string; onClick?: () => void; disabled?: boolean }>> = ({ children, title, onClick, disabled }) => (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      disabled={disabled}
+      className={`group inline-flex items-center text-stone-700 hover:text-indigo-600 transition ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+    >
+      {children}
+    </button>
+  );
 
   return (
-    <div className="p-6">
-      {/* Back */}
-      <div className="mb-6">
-        <Link href="/adminpanel" className="inline-flex items-center gap-2 text-gray-600 hover:text-black">
-          <ArrowLeftIcon className="w-5 h-5" />
-          Back to Products
-        </Link>
+    <div className="min-h-screen bg-stone-100">
+      {/* Floating header */}
+      <div className="sticky top-0 z-20 px-4 sm:px-6 py-3">
+        <div className="relative rounded-2xl border border-stone-200 bg-stone-50/90 backdrop-blur shadow-md ring-1 ring-black/5">
+          {/* Left: back */}
+          <div className="absolute left-3 top-1/2 -translate-y-1/2">
+            <Link href="/adminpanel" className="inline-flex items-center gap-2 text-stone-700 hover:text-stone-900">
+              <ArrowLeftIcon className="h-5 w-5" />
+              <span className="hidden sm:inline">Back to Products</span>
+            </Link>
+          </div>
+
+          {/* Center: title */}
+          <div className="py-2.5 text-center">
+            {!editingTitle ? (
+              <h1 className="text-lg font-semibold tracking-tight text-stone-800">
+                {product.title}
+                <button
+                  onClick={() => { setDraftTitle(product.title); setEditingTitle(true); }}
+                  className="ml-2 align-middle text-stone-500 hover:text-indigo-600"
+                  title="Edit title"
+                >
+                  <PencilSquareIcon className="inline h-4 w-4" />
+                </button>
+              </h1>
+            ) : (
+              <span className="inline-flex items-center gap-2">
+                <input
+                  ref={titleInputRef}
+                  value={draftTitle}
+                  onChange={(e) => setDraftTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") saveTitle();
+                    if (e.key === "Escape") { setEditingTitle(false); setDraftTitle(product.title); }
+                  }}
+                  className="bg-transparent text-lg font-semibold tracking-tight text-stone-800 border-0 border-b border-stone-300 focus:border-indigo-500 focus:ring-0 outline-none px-1"
+                />
+                <button
+                  onClick={saveTitle}
+                  className="text-stone-700 hover:text-indigo-600"
+                  title="Save"
+                  type="button"
+                >
+                  <CheckIcon className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => { setEditingTitle(false); setDraftTitle(product.title); }}
+                  className="text-stone-700 hover:text-stone-900"
+                  title="Cancel"
+                  type="button"
+                >
+                  <XMarkIcon className="w-4 h-4" />
+                </button>
+              </span>
+            )}
+            <p className="text-[11px] text-stone-500">Edit product details</p>
+          </div>
+
+          {/* Right: Save Options */}
+          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+            <IconAction title="Save Options" onClick={handleSaveMetafields}>
+              <CheckIcon className="h-5 w-5" />
+              <span className="ml-1 max-w-0 opacity-0 transition-all duration-200 ease-out group-hover:max-w-[70px] group-hover:opacity-100 whitespace-nowrap text-sm">
+                Save
+              </span>
+            </IconAction>
+          </div>
+        </div>
       </div>
 
-      {/* Two-column layout */}
-      <div className="flex flex-col md:flex-row gap-8">
-        {/* LEFT: Image carousel + uploader */}
-        <div className="flex-shrink-0 w-full md:w-[520px]">
-          <div
-            ref={containerRef}
-            className="relative w-full aspect-square bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center"
-            onMouseDown={onDesignMouseDown}
-            onMouseMove={onDesignMouseMove}
-            onMouseUp={onDesignMouseUp}
-          >
-            {images.length ? (
-              <>
-                <img
-                  ref={imgElRef}
-                  src={primaryUrl || ""}
-                  alt={primaryAlt}
-                  className={`w-full h-full object-contain ${designMode ? "cursor-crosshair" : ""}`}
-                  onLoad={() => requestAnimationFrame(updateDisplayMetrics)}
-                />
-
-                {/* overlay rect */}
-                {overlayRect && (
-                  <div
-                    className="absolute border-2 border-blue-500/90 bg-blue-500/10 rounded"
-                    style={{
-                      left: overlayRect.left,
-                      top: overlayRect.top,
-                      width: overlayRect.width,
-                      height: overlayRect.height,
-                    }}
-                  />
-                )}
-
-                {/* prev/next */}
-                {images.length > 1 && (
-                  <>
-                    <button
-                      onClick={prevImage}
-                      className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/80 hover:bg-white shadow"
-                      title="Previous"
-                      type="button"
-                    >
-                      <ChevronLeftIcon className="w-6 h-6" />
-                    </button>
-                    <button
-                      onClick={nextImage}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/80 hover:bg-white shadow"
-                      title="Next"
-                      type="button"
-                    >
-                      <ChevronRightIcon className="w-6 h-6" />
-                    </button>
-                  </>
-                )}
-
-                <button
-                  onClick={deleteCurrentImage}
-                  disabled={deletingImage}
-                  className={`absolute top-2 right-2 p-2 rounded bg-white/90 hover:bg-white shadow ${
-                    deletingImage ? "opacity-60 cursor-not-allowed" : ""
-                  }`}
-                  title={deletingImage ? "Deleting..." : "Delete image"}
-                  type="button"
-                  aria-disabled={deletingImage}
-                >
-                  <TrashIcon className="w-5 h-5 text-red-600" />
-                </button>
-
-                {designMode && (
-                  <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/60 text-white text-xs rounded px-3 py-1 whitespace-nowrap shadow">
-                    Click and drag to select the design area.
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="text-gray-500">No images</div>
-            )}
-          </div>
-
-          {/* Thumbnails */}
-          <div className="mt-3 flex gap-2 overflow-x-auto">
-            {images.map((edge, idx) => {
-              const node = edge.node;
-              const thumb = node.url || node.src || "";
-              return (
-                <button
-                  key={node.id || idx}
-                  onClick={() => {
-                    setActiveIdx(idx);
-                    requestAnimationFrame(updateDisplayMetrics);
-                  }}
-                  className={`border rounded overflow-hidden w-20 h-20 flex-shrink-0 ${
-                    idx === activeIdx ? "ring-2 ring-black" : ""
-                  }`}
-                  title={`Image ${idx + 1}`}
-                  type="button"
-                >
-                  {thumb ? (
-                    <img src={thumb} alt={`Thumb ${idx + 1}`} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full bg-gray-200" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Add images + Design Area */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            className="hidden"
-            onChange={onFilesChosen}
-          />
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <button
-              onClick={openFilePicker}
-              className="inline-flex items-center gap-2 bg-black text-white px-4 py-2 rounded"
-              type="button"
+      {/* Content */}
+      <div className="px-4 sm:px-6 pb-10">
+        <div className="mx-auto max-w-7xl grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {/* LEFT: Media card */}
+          <div className="rounded-2xl border border-stone-200 bg-stone-50 shadow-sm ring-1 ring-black/5">
+            <div
+              ref={containerRef}
+              className={`relative m-3 w-auto aspect-square bg-stone-100 rounded-xl overflow-hidden flex items-center justify-center ${designMode ? "cursor-crosshair" : ""}`}
+              onMouseDown={onDesignMouseDown}
+              onMouseMove={onDesignMouseMove}
+              onMouseUp={onDesignMouseUp}
             >
-              <PlusIcon className="w-5 h-5" />
-              Add Images
-            </button>
+              {images.length ? (
+                <>
+                  <img
+                    ref={imgElRef}
+                    src={primaryUrl || ""}
+                    alt={primaryAlt}
+                    className="w-full h-full object-contain"
+                    onLoad={() => requestAnimationFrame(updateDisplayMetrics)}
+                  />
 
-            {pendingFiles.length > 0 && (
-              <>
-                <span className="text-sm text-gray-600">
+                  {/* main image colour/side badge */}
+                  {mainBadge && (
+                    <div className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-xs text-stone-700 shadow ring-1 ring-black/10">
+                      <span
+                        className="inline-block h-3 w-3 rounded-full ring-1 ring-stone-300"
+                        style={{ backgroundColor: mainBadge.hex }}
+                        aria-hidden
+                      />
+                      <span className="capitalize">{mainBadge.side}</span>
+                    </div>
+                  )}
+
+                  {overlayRect && (
+                    <div
+                      className="absolute border-2 border-blue-500/90 bg-blue-500/10 rounded-md"
+                      style={{
+                        left: overlayRect.left,
+                        top: overlayRect.top,
+                        width: overlayRect.width,
+                        height: overlayRect.height,
+                      }}
+                    />
+                  )}
+
+                  {images.length > 1 && (
+                    <>
+                      <button
+                        onClick={prevImage}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/90 hover:bg-white shadow ring-1 ring-black/10"
+                        title="Previous"
+                        type="button"
+                      >
+                        <ChevronLeftIcon className="w-6 h-6 text-stone-700" />
+                      </button>
+                      <button
+                        onClick={nextImage}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/90 hover:bg-white shadow ring-1 ring-black/10"
+                        title="Next"
+                        type="button"
+                      >
+                        <ChevronRightIcon className="w-6 h-6 text-stone-700" />
+                      </button>
+                    </>
+                  )}
+
+                  <button
+                    onClick={deleteCurrentImage}
+                    disabled={deletingImage}
+                    title={deletingImage ? "Deleting..." : "Delete image"}
+                    type="button"
+                    aria-disabled={deletingImage}
+                    className={`absolute top-3 right-3 p-2 rounded-full bg-white/95 hover:bg-white shadow ring-1 ring-black/10 ${deletingImage ? "opacity-60 cursor-not-allowed" : ""}`}
+                  >
+                    <TrashIcon className="w-5 h-5 text-rose-600" />
+                  </button>
+
+                  {designMode && (
+                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/60 text-white text-xs rounded px-3 py-1 shadow">
+                      Click & drag to set the design area.
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="text-stone-500">No images</div>
+              )}
+            </div>
+
+            {/* Thumbnails */}
+            <div className="px-3">
+              <div className="flex gap-2 overflow-x-auto">
+                {images.map((edge, idx) => {
+                  const node = edge.node;
+                  const thumb = node.url || node.src || "";
+                  const badge = findColourBadgeForImage(node.id);
+                  return (
+                    <button
+                      key={node.id || idx}
+                      onClick={() => { setActiveIdx(idx); requestAnimationFrame(updateDisplayMetrics); }}
+                      className={`relative border border-stone-200 bg-white rounded-xl overflow-hidden w-20 h-20 flex-shrink-0 ring-1 ring-black/5 transition ${idx === activeIdx ? "outline outline-2 outline-indigo-500" : "hover:scale-[1.01]"}`}
+                      title={`Image ${idx + 1}`}
+                      type="button"
+                    >
+                      {thumb ? (
+                        <img src={thumb} alt={`Thumb ${idx + 1}`} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full bg-stone-200" />
+                      )}
+                      {badge && (
+                        <div className="absolute left-1.5 top-1.5 inline-flex items-center gap-1 rounded-full bg-white/95 px-1.5 py-0.5 text-[10px] text-stone-700 shadow ring-1 ring-black/10">
+                          <span
+                            className="inline-block h-2.5 w-2.5 rounded-full ring-1 ring-stone-300"
+                            style={{ backgroundColor: badge.hex }}
+                            aria-hidden
+                          />
+                          <span className="capitalize">{badge.side}</span>
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Actions row */}
+            <div className="px-3 py-3 flex items-center gap-4">
+              <IconAction title="Add Images" onClick={() => fileInputRef.current?.click()}>
+                <PlusIcon className="h-5 w-5" />
+                <span className="ml-1 max-w-0 opacity-0 transition-all duration-200 ease-out group-hover:max-w-[120px] group-hover:opacity-100 whitespace-nowrap text-sm">
+                  Add Images
+                </span>
+              </IconAction>
+
+              {pendingFiles.length > 0 && (
+                <IconAction title="Upload" onClick={uploadPendingFiles}>
+                  <ArrowUpTrayIcon className="h-5 w-5" />
+                  <span className="ml-1 max-w-0 opacity-0 transition-all duration-200 ease-out group-hover:max-w-[80px] group-hover:opacity-100 whitespace-nowrap text-sm">
+                    Upload
+                  </span>
+                </IconAction>
+              )}
+
+              <IconAction title={designMode ? "Finish Design Area" : "Design Area"} onClick={() => setDesignMode((v) => !v)}>
+                <PencilSquareIcon className="h-5 w-5" />
+                <span className="ml-1 max-w-0 opacity-0 transition-all duration-200 ease-out group-hover:max-w-[160px] group-hover:opacity-100 whitespace-nowrap text-sm">
+                  {designMode ? "Finish Design Area" : "Design Area"}
+                </span>
+              </IconAction>
+
+              {/* Pending note */}
+              {pendingFiles.length > 0 && (
+                <span className="text-xs text-stone-600">
                   {pendingFiles.length} file{pendingFiles.length > 1 ? "s" : ""} ready (800×800)
                 </span>
-                <button
-                  onClick={uploadPendingFiles}
-                  className="inline-flex items-center gap-2 border px-3 py-2 rounded"
-                  type="button"
-                >
-                  Upload
-                </button>
-              </>
-            )}
+              )}
+            </div>
 
-            <button
-              onClick={() => setDesignMode((v) => !v)}
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded border ${
-                designMode ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-900"
-              }`}
-              type="button"
-              title="Select a design area (absolute 800×800)"
-            >
-              <PencilSquareIcon className="w-5 h-5" />
-              {designMode ? "Finish Design Area" : "Design Area"}
-            </button>
+            {/* Hidden file input */}
+            <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={onFilesChosen} />
+          </div>
 
-            {designArea && (
-              <>
-                <span className="text-xs text-gray-600">
-                  {`{ x:${Math.round(designArea.x)}, y:${Math.round(designArea.y)}, w:${Math.round(
-                    designArea.width
-                  )}, h:${Math.round(designArea.height)} }`}
-                </span>
-                <button
-                  onClick={() => setDesignArea(null)}
-                  className="text-sm underline text-gray-600"
-                  type="button"
-                >
-                  Clear
-                </button>
-              </>
-            )}
+          {/* RIGHT: Details first (Description + Price), then Customisation */}
+          <div className="space-y-5">
+            {/* Description */}
+            <div className="rounded-2xl border border-stone-200 bg-white shadow-sm ring-1 ring-black/5 p-4 sm:p-5">
+              <div className="flex items-center gap-2 mb-2">
+                <h4 className="text-lg font-semibold text-stone-900">Description</h4>
+                {!editingDesc && (
+                  <button
+                    onClick={() => { setDraftDesc(currentDesc); setEditingDesc(true); }}
+                    className="p-1 rounded hover:bg-stone-100"
+                    title="Edit description"
+                    type="button"
+                  >
+                    <PencilSquareIcon className="w-5 h-5 text-stone-700" />
+                  </button>
+                )}
+              </div>
+
+              {!editingDesc ? (
+                <div className="prose max-w-none text-stone-800">
+                  {currentDesc ? <div dangerouslySetInnerHTML={{ __html: currentDesc }} /> : <p className="text-stone-600">No description</p>}
+                </div>
+              ) : (
+                <div className="flex items-start gap-2">
+                  <textarea
+                    ref={descTextareaRef}
+                    className="w-full min-h-[140px] bg-transparent border-0 border-b border-stone-300 focus:border-indigo-500 focus:ring-0 outline-none text-stone-800"
+                    value={draftDesc}
+                    onChange={(e) => setDraftDesc(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) saveDescription();
+                      if (e.key === "Escape") { setEditingDesc(false); setDraftDesc(currentDesc); }
+                    }}
+                    placeholder="Enter product description (HTML allowed)"
+                  />
+                  <div className="flex flex-col gap-2 pt-1">
+                    <button onClick={saveDescription} className="text-stone-700 hover:text-indigo-600" title="Save" type="button">
+                      <CheckIcon className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={() => { setEditingDesc(false); setDraftDesc(currentDesc); }}
+                      className="text-stone-700 hover:text-stone-900"
+                      title="Cancel"
+                      type="button"
+                    >
+                      <XMarkIcon className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Price */}
+            <div className="rounded-2xl border border-stone-200 bg-white shadow-sm ring-1 ring-black/5 p-4 sm:p-5">
+              <div className="flex items-center gap-2 mb-2">
+                <h4 className="text-lg font-semibold text-stone-900">Price</h4>
+                {!editingPrice && (
+                  <button
+                    onClick={() => { setDraftPrice(product.variants?.edges?.[0]?.node?.price ?? ""); setEditingPrice(true); }}
+                    className="p-1 rounded hover:bg-stone-100"
+                    title="Edit price"
+                    type="button"
+                  >
+                    <PencilSquareIcon className="w-5 h-5 text-stone-700" />
+                  </button>
+                )}
+              </div>
+
+              {!editingPrice ? (
+                <div className="text-stone-800 text-base">
+                  ${product.variants?.edges?.[0]?.node?.price ?? "No price"}
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    className="bg-transparent border-0 border-b border-stone-300 focus:border-indigo-500 focus:ring-0 outline-none text-stone-800"
+                    value={draftPrice}
+                    onChange={(e) => setDraftPrice(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") savePrice();
+                      if (e.key === "Escape") { setEditingPrice(false); setDraftPrice(product.variants?.edges?.[0]?.node?.price ?? ""); }
+                    }}
+                    placeholder="Enter product price"
+                    min="0"
+                  />
+                  <button onClick={savePrice} className="text-stone-700 hover:text-indigo-600" title="Save" type="button">
+                    <CheckIcon className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => { setEditingPrice(false); setDraftPrice(product.variants?.edges?.[0]?.node?.price ?? ""); }}
+                    className="text-stone-700 hover:text-stone-900"
+                    title="Cancel"
+                    type="button"
+                  >
+                    <XMarkIcon className="w-5 h-5" />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Customisation Options */}
+            <div className="rounded-2xl border border-stone-200 bg-stone-50 shadow-sm ring-1 ring-black/5 p-4 sm:p-5">
+              <div className="flex items-center justify-between">
+                <h4 className="text-lg font-semibold text-stone-900">Customisation Options</h4>
+              </div>
+
+              <div className="mt-4 space-y-4">
+                {/* Custom Image */}
+                <div>
+                  <label className="inline-flex items-center gap-3 text-stone-800 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={customImage}
+                      onChange={(e) => setCustomImage(e.target.checked)}
+                      className="sr-only"
+                    />
+                    <div
+                      className={`relative h-6 w-11 rounded-full transition-colors duration-200 ${
+                        customImage ? "bg-indigo-500" : "bg-stone-300"
+                      }`}
+                    >
+                      <span
+                        className={`absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform duration-200 ${
+                          customImage ? "translate-x-5" : "translate-x-0"
+                        }`}
+                      />
+                    </div>
+                    <span>Custom Image</span>
+                  </label>
+
+                  {customImage && (
+                    <div className="pl-14 pt-2">
+                      <label className="block text-sm text-stone-800">
+                        Extra Price
+                        <input
+                          type="text"
+                          className="mt-1 block w-32 bg-transparent border-0 border-b border-stone-300 focus:border-indigo-500 focus:ring-0 outline-none"
+                          placeholder="e.g. 5.00"
+                          value={customImagePrice}
+                          onChange={(e) => setCustomImagePrice(e.target.value)}
+                        />
+                      </label>
+                    </div>
+                  )}
+                </div>
+
+
+                {/* Custom Text */}
+                <div>
+                  <label className="inline-flex items-center gap-3 text-stone-800 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={customText}
+                      onChange={(e) => setCustomText(e.target.checked)}
+                      className="sr-only"
+                    />
+                    <div
+                      className={`relative h-6 w-11 rounded-full transition-colors duration-200 ${
+                        customText ? "bg-indigo-500" : "bg-stone-300"
+                      }`}
+                    >
+                      <span
+                        className={`absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform duration-200 ${
+                          customText ? "translate-x-5" : "translate-x-0"
+                        }`}
+                      />
+                    </div>
+                    <span>Custom Text</span>
+                  </label>
+
+                  {customText && (
+                    <div className="pl-14 pt-2">
+                      <label className="block text-sm text-stone-800">
+                        Extra Price
+                        <input
+                          type="text"
+                          className="mt-1 block w-32 bg-transparent border-0 border-b border-stone-300 focus:border-indigo-500 focus:ring-0 outline-none"
+                          placeholder="e.g. 3.00"
+                          value={customTextPrice}
+                          onChange={(e) => setCustomTextPrice(e.target.value)}
+                        />
+                      </label>
+                    </div>
+                  )}
+                </div>
+
+                {/* Custom Colour */}
+                <div>
+                  <label className="inline-flex items-center gap-3 text-stone-800 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={customColours}
+                      onChange={(e) => setCustomColours(e.target.checked)}
+                      className="sr-only"
+                    />
+                    <div
+                      className={`relative h-6 w-11 rounded-full transition-colors duration-200 ${
+                        customColours ? "bg-indigo-500" : "bg-stone-300"
+                      }`}
+                    >
+                      <span
+                        className={`absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform duration-200 ${
+                          customColours ? "translate-x-5" : "translate-x-0"
+                        }`}
+                      />
+                    </div>
+                    <span>Custom Colour</span>
+                  </label>
+
+                  {customColours && (
+                    <div className="pl-14 pt-2">
+                      <label className="block text-sm text-stone-800">
+                        Extra Price
+                        <input
+                          type="text"
+                          className="mt-1 block w-32 bg-transparent border-0 border-b border-stone-300 focus:border-indigo-500 focus:ring-0 outline-none"
+                          placeholder="e.g. 2.00"
+                          value={customColoursPrice}
+                          onChange={(e) => setCustomColoursPrice(e.target.value)}
+                        />
+                      </label>
+                      {/* Colours editor */}
+                      <div className="mt-4">
+                        <div className="inline-flex items-center gap-2 mb-2">
+                          <span className="font-medium text-stone-900">Colours Available</span>
+                          <button onClick={pickColour} className="p-1.5 rounded-md hover:bg-stone-100 ring-1 ring-inset ring-transparent hover:ring-stone-200" title="Pick colour" type="button">
+                            <EyeDropperIcon className="w-5 h-5 text-stone-700" />
+                          </button>
+                          <button
+                            onClick={() => setColours((prev) => [...prev, "#000000"])}
+                            className="p-1.5 rounded-md hover:bg-stone-100 ring-1 ring-inset ring-transparent hover:ring-stone-200"
+                            title="Add colour"
+                            type="button"
+                          >
+                            <PlusIcon className="w-5 h-5 text-stone-700" />
+                          </button>
+                        </div>
+
+                        {colours.length === 0 ? (
+                          <p className="text-sm text-stone-500">No colours yet.</p>
+                        ) : (
+                          <div className="flex flex-wrap gap-3">
+                            {colours.map((hex, idx) => (
+                              <div key={`${hex}-${idx}`} className="flex items-center gap-2">
+                                <div
+                                  className="w-8 h-8 rounded-lg border border-stone-300 bg-white cursor-pointer shadow-sm ring-1 ring-black/5"
+                                  style={{ backgroundColor: hex }}
+                                  title={`${hex} — click to remove`}
+                                  onClick={() => {
+                                    setColours((prev) => prev.filter((_, i) => i !== idx));
+                                    if (selectedColour === hex) setSelectedColour(null);
+                                  }}
+                                />
+                                <input
+                                  type="text"
+                                  value={localHexValues[idx] !== undefined ? localHexValues[idx] : hex}
+                                  onChange={(e) => handleHexInputChange(e, idx)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Backspace" && e.currentTarget.value === "#") e.preventDefault();
+                                    if (e.key === "Enter") {
+                                      const normalized = normalizeHexInput(e.currentTarget.value);
+                                      setColours((prev) => prev.map((c, i) => (i === idx ? normalized : c)));
+                                      setLocalHexValues((prev) => { const next = { ...prev }; delete next[idx]; return next; });
+                                    }
+                                  }}
+                                  onBlur={() => {
+                                    const currentValue = localHexValues[idx] !== undefined ? localHexValues[idx] : hex;
+                                    const normalized = normalizeHexInput(currentValue);
+                                    setColours((prev) => prev.map((c, i) => (i === idx ? normalized : c)));
+                                    setLocalHexValues((prev) => { const next = { ...prev }; delete next[idx]; return next; });
+                                  }}
+                                  className="w-28 px-1.5 py-1 bg-transparent border-0 border-b border-stone-300 text-sm focus:border-indigo-500 focus:ring-0 outline-none"
+                                  placeholder="#RRGGBB"
+                                  maxLength={7}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* RIGHT: details + editors */}
-        <div className="flex-1">
-          {/* Title */}
-          {!editingTitle ? (
-            <div className="flex items-center gap-2 mb-2">
-              <h1 className="text-3xl font-bold">{product.title}</h1>
-              <button
-                onClick={() => {
-                  setDraftTitle(product.title);
-                  setEditingTitle(true);
-                }}
-                className="p-1 rounded hover:bg-gray-100"
-                title="Edit title"
-                type="button"
-              >
-                <PencilSquareIcon className="w-5 h-5 text-gray-700" />
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 mb-2">
-              <input
-                ref={titleInputRef}
-                value={draftTitle}
-                onChange={(e) => setDraftTitle(e.target.value)}
-                className="border rounded px-3 py-2 text-xl font-semibold flex-1"
-              />
-              <button onClick={saveTitle} className="p-2 rounded bg-black text-white" title="Save">
-                <CheckIcon className="w-5 h-5" />
-              </button>
-              <button
-                onClick={() => {
-                  setEditingTitle(false);
-                  setDraftTitle(product.title);
-                }}
-                className="p-2 rounded border"
-                title="Cancel"
-              >
-                <XMarkIcon className="w-5 h-5" />
-              </button>
-            </div>
-          )}
+        {/* Product Details  */}
+        {product.variants?.edges?.length ? (
+          <div className="mx-auto max-w-7xl mt-5 rounded-2xl border border-stone-200 bg-white shadow-sm ring-1 ring-black/5 p-4 sm:p-5">
+            <h4 className="text-lg font-semibold text-stone-900 mb-4">Product Details</h4>
 
-          {/* Description */}
-          <div className="mb-6">
-            <div className="flex items-center gap-2 mb-2">
-              <h2 className="text-lg font-semibold">Description</h2>
-              {!editingDesc && (
-                <button
-                  onClick={() => {
-                    setDraftDesc(currentDesc);
-                    setEditingDesc(true);
-                  }}
-                  className="p-1 rounded hover:bg-gray-100"
-                  title="Edit description"
-                  type="button"
-                >
-                  <PencilSquareIcon className="w-5 h-5 text-gray-700" />
-                </button>
-              )}
-            </div>
-
-            {!editingDesc ? (
-              <div className="prose max-w-none">
-                {currentDesc ? (
-                  <div dangerouslySetInnerHTML={{ __html: currentDesc }} />
-                ) : (
-                  <p className="text-gray-700">No description</p>
-                )}
-              </div>
-            ) : (
-              <div className="flex items-start gap-2">
-                <textarea
-                  ref={descTextareaRef}
-                  className="w-full min-h-[180px] p-3 border rounded"
-                  value={draftDesc}
-                  onChange={(e) => setDraftDesc(e.target.value)}
-                  placeholder="Enter product description (HTML allowed)"
-                />
-                <div className="flex flex-col gap-2">
-                  <button onClick={saveDescription} className="p-2 rounded bg-black text-white" title="Save">
-                    <CheckIcon className="w-5 h-5" />
-                  </button>
-                  <button
-                    onClick={() => {
-                      setEditingDesc(false);
-                      setDraftDesc(currentDesc);
-                    }}
-                    className="p-2 rounded border"
-                    title="Cancel"
-                  >
-                    <XMarkIcon className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Price */}
-          <div className="mb-6">
-            <div className="flex items-center gap-2 mb-2">
-              <h2 className="text-lg font-semibold">Price</h2>
-              {!editingPrice && (
-                <button
-                  onClick={() => {
-                    setDraftPrice(product.variants?.edges?.[0]?.node?.price ?? "");
-                    setEditingPrice(true);
-                  }}
-                  className="p-1 rounded hover:bg-gray-100"
-                  title="Edit price"
-                  type="button"
-                >
-                  <PencilSquareIcon className="w-5 h-5 text-gray-700" />
-                </button>
-              )}
-            </div>
-
-            {!editingPrice ? (
-              <div className="prose max-w-none">
-                <span className="text-gray-700">${product.variants?.edges?.[0]?.node?.price ?? "No price"}</span>
-              </div>
-            ) : (
-              <div className="flex items-start gap-2">
-                <input
-                  type="number"
-                  className="w-full p-3 border rounded"
-                  value={draftPrice}
-                  onChange={(e) => setDraftPrice(e.target.value)}
-                  placeholder="Enter product price"
-                  min="0"
-                />
-                <div className="flex flex-col gap-2">
-                  <button onClick={savePrice} className="p-2 rounded bg-black text-white" title="Save">
-                    <CheckIcon className="w-5 h-5" />
-                  </button>
-                  <button
-                    onClick={() => {
-                      setEditingPrice(false);
-                      setDraftPrice(product.variants?.edges?.[0]?.node?.price ?? "");
-                    }}
-                    className="p-2 rounded border"
-                    title="Cancel"
-                  >
-                    <XMarkIcon className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Customisation Options */}
-          <div className="p-4 border rounded">
-            <h3 className="text-xl font-semibold mb-4">Customisation Options</h3>
-
-            <div className="flex flex-col gap-3 mb-4">
-              <div className="flex items-center gap-3">
-                <label className="inline-flex items-center gap-2">
-                  <span>Custom Image</span>
-                  <input
-                    type="checkbox"
-                    className="w-5 h-5"
-                    checked={customImage}
-                    onChange={(e) => setCustomImage(e.target.checked)}
-                  />
-                </label>
-                {customImage && (
-                  <label className="inline-flex items-center gap-2">
-                    <span>Extra Price</span>
-                    <input
-                      type="text"
-                      className="border rounded px-2 py-1 w-28"
-                      placeholder="e.g. 5.00"
-                      value={customImagePrice}
-                      onChange={(e) => setCustomImagePrice(e.target.value)}
-                    />
-                  </label>
-                )}
-              </div>
-
-              <div className="flex items-center gap-3">
-                <label className="inline-flex items-center gap-2">
-                  <span>Custom Text</span>
-                  <input
-                    type="checkbox"
-                    className="w-5 h-5"
-                    checked={customText}
-                    onChange={(e) => setCustomText(e.target.checked)}
-                  />
-                </label>
-                {customText && (
-                  <label className="inline-flex items-center gap-2">
-                    <span>Extra Price</span>
-                    <input
-                      type="text"
-                      className="border rounded px-2 py-1 w-28"
-                      placeholder="e.g. 3.00"
-                      value={customTextPrice}
-                      onChange={(e) => setCustomTextPrice(e.target.value)}
-                    />
-                  </label>
-                )}
-              </div>
-
-              <div className="flex items-center gap-3">
-                <label className="inline-flex items-center gap-2">
-                  <span>Custom Colour</span>
-                  <input
-                    type="checkbox"
-                    className="w-5 h-5"
-                    checked={customColours}
-                    onChange={(e) => setCustomColours(e.target.checked)}
-                  />
-                </label>
-                {customColours && (
-                  <label className="inline-flex items-center gap-2">
-                    <span>Extra Price</span>
-                    <input
-                      type="text"
-                      className="border rounded px-2 py-1 w-28"
-                      placeholder="e.g. 2.00"
-                      value={customColoursPrice}
-                      onChange={(e) => setCustomColoursPrice(e.target.value)}
-                    />
-                  </label>
-                )}
-              </div>
-
-              <p className="text-sm text-gray-500">Weight: {weightDisplay}</p>
-            </div>
-
-            {/* Colours editor */}
-            {customColours && (
-              <>
-                <div className="mb-3">
-                  <div className="inline-flex items-center gap-2 mb-2">
-                    <span className="font-medium">Colours Available</span>
-                    <button
-                      onClick={pickColour}
-                      className="p-1 rounded hover:bg-gray-100"
-                      title="Pick colour"
-                      type="button"
-                    >
-                      <EyeDropperIcon className="w-5 h-5 text-gray-700" />
-                    </button>
-                    <button
-                      onClick={() => setColours((prev) => [...prev, "#000000"])}
-                      className="p-1 rounded hover:bg-gray-100"
-                      title="Add colour"
-                      type="button"
-                    >
-                      <PlusIcon className="w-5 h-5 text-gray-700" />
-                    </button>
-                  </div>
-
-                  {colours.length === 0 ? (
-                    <p className="text-sm text-gray-500">No colours yet.</p>
-                  ) : (
-                    <div className="flex flex-wrap gap-3">
-                      {colours.map((hex, idx) => (
-                        <div key={`${hex}-${idx}`} className="flex items-center gap-2">
-                          <div
-                            className="w-8 h-8 rounded border cursor-pointer"
-                            style={{ backgroundColor: hex }}
-                            title={`${hex} — click to remove`}
-                            onClick={() => {
-                              setColours((prev) => prev.filter((_, i) => i !== idx));
-                              if (selectedColour === hex) setSelectedColour(null);
-                            }}
-                          />
-                          <input
-                            type="text"
-                            value={localHexValues[idx] !== undefined ? localHexValues[idx] : hex}
-                            onChange={(e) => handleHexInputChange(e, idx)}
-                            onKeyDown={(e) => {
-                              // Prevent backspace from removing the single "#"
-                              if (e.key === "Backspace" && e.currentTarget.value === "#") {
-                                e.preventDefault();
-                              }
-                            }}
-                            onBlur={() => {
-                              const currentValue = localHexValues[idx] !== undefined ? localHexValues[idx] : hex;
-                              const normalized = normalizeHexInput(currentValue);
-                              setColours((prev) => prev.map((c, i) => (i === idx ? normalized : c)));
-                              setLocalHexValues((prev) => {
-                                const next = { ...prev };
-                                delete next[idx];
-                                return next;
-                              });
-                            }}
-                            className="w-28 px-2 py-1 border rounded text-sm"
-                            placeholder="#RRGGBB"
-                            maxLength={7}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Select active colour */}
-                {colours.length > 0 && (
-                  <div className="mb-3">
-                    <div className="font-medium mb-1">Select Colour</div>
-                    <div className="flex flex-wrap gap-2">
-                      {colours.map((hex) => (
+            {/* Owner + Weight */}
+            {(() => {
+              const first = product.variants?.edges?.[0]?.node;
+              if (!first) return null;
+              return (
+                <ul className="space-y-3 mb-4">
+                  <li className="text-sm text-stone-700">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-stone-900">Product Owner:</span>
+                      {!editingProductOwner ? (
+                        <span className="text-stone-800">{!productOwner || productOwner === "None@Set.test" ? "None Set" : productOwner}</span>
+                      ) : (
+                        <>
+                          <select
+                            value={productOwner}
+                            onChange={(e) => setProductOwner(e.target.value)}
+                            className="bg-transparent border-0 border-b border-stone-300 focus:border-indigo-500 focus:ring-0 outline-none text-stone-800"
+                          >
+                            <option value="">None set</option>
+                            {designeremails.map((email) => (
+                              <option key={email} value={email}>{email}</option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={async () => { setEditingProductOwner(false); await handleSaveMetafields(); }}
+                            className="text-stone-700 hover:text-indigo-600"
+                            title="Save Product Owner"
+                            type="button"
+                          >
+                            <CheckIcon className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => { setEditingProductOwner(false); setProductOwner(product.po?.value || ""); }}
+                            className="text-stone-700 hover:text-stone-900"
+                            title="Cancel"
+                            type="button"
+                          >
+                            <XMarkIcon className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
+                      {!editingProductOwner && currentUserRole === "admin" && (
                         <button
-                          key={hex}
+                          onClick={() => { setEditingProductOwner(true); setProductOwner(product.po?.value || ""); }}
+                          className="p-1.5 rounded hover:bg-stone-100"
+                          title="Edit Product Owner"
                           type="button"
-                          onClick={() => setSelectedColour(hex)}
-                          className={`w-8 h-8 rounded-full border ${
-                            selectedColour === hex ? "ring-2 ring-black" : ""
-                          }`}
-                          title={`Use ${hex}`}
-                          style={{ backgroundColor: hex }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Front/back preview for selected colour */}
-                {selectedColour && (
-                  <div className="mt-4 p-3 border rounded">
-                    <div className="inline-flex gap-3">
-                      {(["front", "back"] as const).map((side) => {
-                        const imgId = colourImageMap[selectedColour!]?.[side] ?? null;
-                        const node = getImageById(imgId);
-                        const src = node?.url || node?.src || "";
-                        return (
-                          <div key={side} className="border rounded p-2">
-                            <div className="text-xs text-gray-500 mb-1 capitalize">{side}</div>
-                            <div className="w-32 h-32 bg-gray-100 rounded overflow-hidden flex items-center justify-center">
-                              {src ? (
-                                <img src={src} alt={`${side} preview`} className="w-full h-full object-contain" />
-                              ) : (
-                                <span className="text-gray-400 text-xs">Blank</span>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-
-            <div className="mt-4">
-              <button onClick={handleSaveMetafields} className="bg-black text-white px-4 py-2 rounded">
-                Save Options
-              </button>
-            </div>
-
-            <div className="mt-3 text-xs text-gray-600">
-              <span className="font-semibold">Design Area (saved at 0–800):</span>{" "}
-              {designArea
-                ? `{ x:${Math.round(designArea.x)}, y:${Math.round(designArea.y)}, w:${Math.round(
-                    designArea.width
-                  )}, h:${Math.round(designArea.height)} }`
-                : "None"}
-            </div>
-          </div>
-
-          {/* Product Details / Per-variant editing */}
-          {product.variants?.edges?.length ? (
-            <div className="mt-8 p-4 border rounded">
-              <h3 className="text-xl font-semibold mb-4">Product Details</h3>
-              {(() => {
-                const first = product.variants?.edges?.[0]?.node;
-                if (!first) return null;
-                return (
-                  <ul className="space-y-1 mb-4">
-                    <li className="text-sm text-gray-600 mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold">Product Owner:</span>
-                        {!editingProductOwner ? (
-                          <span>{!productOwner || productOwner === "None@Set.test" ? "None Set" : productOwner}</span>
-                        ) : (
-                          <>
-                            <select
-                              value={productOwner}
-                              onChange={(e) => setProductOwner(e.target.value)}
-                              className="border rounded px-2 py-1"
-                            >
-                              <option value="">None set</option>
-                              {designeremails.map((email) => (
-                                <option key={email} value={email}>
-                                  {email}
-                                </option>
-                              ))}
-                            </select>
-                            <button
-                              onClick={async () => {
-                                setEditingProductOwner(false);
-                                await handleSaveMetafields();
-                              }}
-                              className="p-2 rounded bg-black text-white"
-                              title="Save Product Owner"
-                              type="button"
-                            >
-                              <CheckIcon className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                setEditingProductOwner(false);
-                                setProductOwner(product.po?.value || "");
-                              }}
-                              className="p-2 rounded border"
-                              title="Cancel"
-                              type="button"
-                            >
-                              <XMarkIcon className="w-4 h-4" />
-                            </button>
-                          </>
-                        )}
-                        {!editingProductOwner && currentUserRole === "admin" && (
-                          <button
-                            onClick={() => {
-                              setEditingProductOwner(true);
-                              setProductOwner(product.po?.value || "");
-                            }}
-                            className="p-2 rounded hover:bg-gray-100"
-                            title="Edit Product Owner"
-                            type="button"
-                          >
-                            <PencilSquareIcon className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    </li>
-
-                    <li className="text-sm text-gray-600 mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold">Weight:</span>
-                        {!editingWeight ? (
-                          <span>
-                            {first.inventoryItem?.measurement?.weight?.value != null &&
-                            first.inventoryItem?.measurement?.weight?.unit
-                              ? `${first.inventoryItem.measurement.weight.value} ${String(
-                                  first.inventoryItem.measurement.weight.unit
-                                ).toLowerCase()}`
-                              : "No weight info"}
-                          </span>
-                        ) : (
-                          <>
-                            <input
-                              type="number"
-                              value={draftWeight}
-                              onChange={(e) => setDraftWeight(e.target.value)}
-                              className="border rounded px-2 py-1 w-24"
-                              min="0"
-                            />
-                            <button
-                              onClick={saveWeight}
-                              className="p-2 rounded bg-black text-white"
-                              title="Save Weight"
-                              type="button"
-                            >
-                              <CheckIcon className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                setEditingWeight(false);
-                                setDraftWeight(
-                                  first.inventoryItem?.measurement?.weight?.value != null
-                                    ? String(first.inventoryItem.measurement.weight.value)
-                                    : ""
-                                );
-                              }}
-                              className="p-2 rounded border"
-                              title="Cancel"
-                              type="button"
-                            >
-                              <XMarkIcon className="w-4 h-4" />
-                            </button>
-                          </>
-                        )}
-                        {!editingWeight && (
-                          <button
-                            onClick={() => setEditingWeight(true)}
-                            className="p-2 rounded hover:bg-gray-100"
-                            title="Edit Weight"
-                            type="button"
-                          >
-                            <PencilSquareIcon className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    </li>
-                  </ul>
-                );
-              })()}
-
-              <h4 className="text-lg font-semibold mt-2 mb-2">Stock by Variant</h4>
-              <ul className="space-y-1">
-                {product.variants.edges.map(({ node }) => (
-                  <li key={node.id} className="text-sm text-gray-600">
-                    <div>
-                      <span className="font-semibold">{node.title}</span>
-                    </div>
-
-                    {/* SKU */}
-                    <div className="ml-4">
-                      <span className="font-semibold">SKU:</span>
-                      {editingSkuId === node.id ? (
-                        <>
-                          <input
-                            value={draftSku}
-                            onChange={(e) => setDraftSku(e.target.value)}
-                            className="border rounded px-2 py-1 ml-2"
-                          />
-                          <button
-                            onClick={async () => {
-                              await saveSku();
-                              setEditingSkuId(null);
-                            }}
-                            className="p-2 rounded bg-black text-white ml-1"
-                            title="Save SKU"
-                            type="button"
-                          >
-                            <CheckIcon className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => setEditingSkuId(null)}
-                            className="p-2 rounded border ml-1"
-                            title="Cancel"
-                            type="button"
-                          >
-                            <XMarkIcon className="w-4 h-4" />
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <span className="ml-2">{node.sku ?? "No SKU info"}</span>
-                          <button
-                            onClick={() => {
-                              setEditingSkuId(node.id);
-                              setDraftSku(node.sku ?? "");
-                            }}
-                            className="p-2 rounded hover:bg-gray-100 ml-1"
-                            title="Edit SKU"
-                            type="button"
-                          >
-                            <PencilSquareIcon className="w-4 h-4" />
-                          </button>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Barcode */}
-                    <div className="ml-4">
-                      <span className="font-semibold">Barcode:</span>
-                      {editingBarcodeId === node.id ? (
-                        <>
-                          <input
-                            value={draftBarcode}
-                            onChange={(e) => setDraftBarcode(e.target.value)}
-                            className="border rounded px-2 py-1 ml-2"
-                          />
-                          <button
-                            onClick={async () => {
-                              await saveBarcode();
-                              setEditingBarcodeId(null);
-                            }}
-                            className="p-2 rounded bg-black text-white ml-1"
-                            title="Save Barcode"
-                            type="button"
-                          >
-                            <CheckIcon className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => setEditingBarcodeId(null)}
-                            className="p-2 rounded border ml-1"
-                            title="Cancel"
-                            type="button"
-                          >
-                            <XMarkIcon className="w-4 h-4" />
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <span className="ml-2">{node.barcode ?? "No barcode info"}</span>
-                          <button
-                            onClick={() => {
-                              setEditingBarcodeId(node.id);
-                              setDraftBarcode(node.barcode ?? "");
-                            }}
-                            className="p-2 rounded hover:bg-gray-100 ml-1"
-                            title="Edit Barcode"
-                            type="button"
-                          >
-                            <PencilSquareIcon className="w-4 h-4" />
-                          </button>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Stock */}
-                    <div className="ml-4">
-                      <span className="font-semibold">Stock:</span>
-                      {editingStock === node.id ? (
-                        <>
-                          <input
-                            value={draftStock}
-                            onChange={(e) => setDraftStock(e.target.value)}
-                            className="border rounded px-2 py-1 ml-2"
-                          />
-                          <button
-                            onClick={async () => {
-                              await saveStock();
-                              setEditingStock(null);
-                            }}
-                            className="p-2 rounded bg-black text-white ml-1"
-                            title="Save Stock"
-                            type="button"
-                          >
-                            <CheckIcon className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => setEditingStock(null)}
-                            className="p-2 rounded border ml-1"
-                            title="Cancel"
-                            type="button"
-                          >
-                            <XMarkIcon className="w-4 h-4" />
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <span className="ml-2">{node.inventoryQuantity ?? "No stock info"}</span>
-                          <button
-                            onClick={() => {
-                              setEditingStock(node.id);
-                              setDraftStock(node.inventoryQuantity != null ? String(node.inventoryQuantity) : "");
-                            }}
-                            className="p-2 rounded hover:bg-gray-100 ml-1"
-                            title="Edit Stock"
-                            type="button"
-                          >
-                            <PencilSquareIcon className="w-4 h-4" />
-                          </button>
-                        </>
+                        >
+                          <PencilSquareIcon className="w-4 h-4 text-stone-700" />
+                        </button>
                       )}
                     </div>
                   </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </div>
+
+                  <li className="text-sm text-stone-700">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-stone-900">Weight:</span>
+                      {!editingWeight ? (
+                        <span className="text-stone-800">
+                          {first.inventoryItem?.measurement?.weight?.value != null && first.inventoryItem?.measurement?.weight?.unit
+                            ? `${first.inventoryItem.measurement.weight.value} ${String(first.inventoryItem.measurement.weight.unit).toLowerCase()}`
+                            : "No weight info"}
+                        </span>
+                      ) : (
+                        <>
+                          <input
+                            type="number"
+                            value={draftWeight}
+                            onChange={(e) => setDraftWeight(e.target.value)}
+                            className="bg-transparent border-0 border-b border-stone-300 focus:border-indigo-500 focus:ring-0 outline-none text-stone-800 w-24"
+                            min="0"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") saveWeight();
+                              if (e.key === "Escape") {
+                                setEditingWeight(false);
+                                setDraftWeight(first.inventoryItem?.measurement?.weight?.value != null ? String(first.inventoryItem.measurement.weight.value) : "");
+                              }
+                            }}
+                          />
+                          <button onClick={saveWeight} className="text-stone-700 hover:text-indigo-600" title="Save Weight" type="button">
+                            <CheckIcon className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setEditingWeight(false);
+                              setDraftWeight(first.inventoryItem?.measurement?.weight?.value != null ? String(first.inventoryItem.measurement.weight.value) : "");
+                            }}
+                            className="text-stone-700 hover:text-stone-900"
+                            title="Cancel"
+                            type="button"
+                          >
+                            <XMarkIcon className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
+                      {!editingWeight && (
+                        <button
+                          onClick={() => setEditingWeight(true)}
+                          className="p-1.5 rounded hover:bg-stone-100"
+                          title="Edit Weight"
+                          type="button"
+                        >
+                          <PencilSquareIcon className="w-4 h-4 text-stone-700" />
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                </ul>
+              );
+            })()}
+
+            <h4 className="text-lg font-semibold text-stone-900 mb-4">Variant Details</h4>
+            <ul className="space-y-3">
+              {product.variants.edges.map(({ node }) => (
+                <li key={node.id} className="text-sm text-stone-700">
+                  <div className="font-medium text-stone-900">{node.title}</div>
+
+                  {/* SKU */}
+                  <div className="ml-4 mt-1">
+                    <span className="font-semibold text-stone-900">SKU:</span>
+                    {editingSkuId === node.id ? (
+                      <span className="inline-flex items-center gap-2">
+                        <input
+                          value={draftSku}
+                          onChange={(e) => setDraftSku(e.target.value)}
+                          className="ml-2 bg-transparent border-0 border-b border-stone-300 focus:border-indigo-500 focus:ring-0 outline-none"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") { saveSku(); setEditingSkuId(null); }
+                            if (e.key === "Escape") setEditingSkuId(null);
+                          }}
+                        />
+                        <button onClick={() => { saveSku(); setEditingSkuId(null); }} className="text-stone-700 hover:text-indigo-600" title="Save" type="button">
+                          <CheckIcon className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => setEditingSkuId(null)} className="text-stone-700 hover:text-stone-900" title="Cancel" type="button">
+                          <XMarkIcon className="w-4 h-4" />
+                        </button>
+                      </span>
+                    ) : (
+                      <>
+                        <span className="ml-2 text-stone-800">{node.sku ?? "No SKU info"}</span>
+                        <button
+                          onClick={() => { setEditingSkuId(node.id); setDraftSku(node.sku ?? ""); }}
+                          className="p-1.5 rounded hover:bg-stone-100 ml-1"
+                          title="Edit SKU"
+                          type="button"
+                        >
+                          <PencilSquareIcon className="w-4 h-4 text-stone-700" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Barcode */}
+                  <div className="ml-4 mt-1">
+                    <span className="font-semibold text-stone-900">Barcode:</span>
+                    {editingBarcodeId === node.id ? (
+                      <span className="inline-flex items-center gap-2">
+                        <input
+                          value={draftBarcode}
+                          onChange={(e) => setDraftBarcode(e.target.value)}
+                          className="ml-2 bg-transparent border-0 border-b border-stone-300 focus:border-indigo-500 focus:ring-0 outline-none"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") { saveBarcode(); setEditingBarcodeId(null); }
+                            if (e.key === "Escape") setEditingBarcodeId(null);
+                          }}
+                        />
+                        <button onClick={() => { saveBarcode(); setEditingBarcodeId(null); }} className="text-stone-700 hover:text-indigo-600" title="Save" type="button">
+                          <CheckIcon className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => setEditingBarcodeId(null)} className="text-stone-700 hover:text-stone-900" title="Cancel" type="button">
+                          <XMarkIcon className="w-4 h-4" />
+                        </button>
+                      </span>
+                    ) : (
+                      <>
+                        <span className="ml-2 text-stone-800">{node.barcode ?? "No barcode info"}</span>
+                        <button
+                          onClick={() => { setEditingBarcodeId(node.id); setDraftBarcode(node.barcode ?? ""); }}
+                          className="p-1.5 rounded hover:bg-stone-100 ml-1"
+                          title="Edit Barcode"
+                          type="button"
+                        >
+                          <PencilSquareIcon className="w-4 h-4 text-stone-700" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Stock */}
+                  <div className="ml-4 mt-1">
+                    <span className="font-semibold text-stone-900">Stock:</span>
+                    {editingStock === node.id ? (
+                      <span className="inline-flex items-center gap-2">
+                        <input
+                          value={draftStock}
+                          onChange={(e) => setDraftStock(e.target.value)}
+                          className="ml-2 bg-transparent border-0 border-b border-stone-300 focus:border-indigo-500 focus:ring-0 outline-none"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") { saveStock(); setEditingStock(null); }
+                            if (e.key === "Escape") setEditingStock(null);
+                          }}
+                        />
+                        <button onClick={() => { saveStock(); setEditingStock(null); }} className="text-stone-700 hover:text-indigo-600" title="Save" type="button">
+                          <CheckIcon className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => setEditingStock(null)} className="text-stone-700 hover:text-stone-900" title="Cancel" type="button">
+                          <XMarkIcon className="w-4 h-4" />
+                        </button>
+                      </span>
+                    ) : (
+                      <>
+                        <span className="ml-2 text-stone-800">{node.inventoryQuantity ?? "No stock info"}</span>
+                        <button
+                          onClick={() => {
+                            setEditingStock(node.id);
+                            setDraftStock(node.inventoryQuantity != null ? String(node.inventoryQuantity) : "");
+                          }}
+                          className="p-1.5 rounded hover:bg-stone-100 ml-1"
+                          title="Edit Stock"
+                          type="button"
+                        >
+                          <PencilSquareIcon className="w-4 h-4 text-stone-700" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </div>
     </div>
   );
