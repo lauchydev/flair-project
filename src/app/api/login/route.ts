@@ -47,7 +47,7 @@ export async function POST(req: Request) {
     const secure = process.env.NODE_ENV === "production" ? " Secure;" : "";
     res.headers.append(
       "Set-Cookie",
-      `${COOKIE_NAME}=${value}; Path=/; HttpOnly;${secure} SameSite=Lax; Max-Age=${60 * 60 * 24 * 7}`
+      `${COOKIE_NAME}=${value}; Path=/;${secure} SameSite=Lax; Max-Age=${60 * 60 * 24 * 7}`
     );
 
     return res;
