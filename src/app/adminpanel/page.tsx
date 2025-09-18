@@ -11,6 +11,7 @@ import {
   ArrowLeftIcon,
   MagnifyingGlassIcon,
   XMarkIcon,
+  UserCircleIcon,
 } from "@heroicons/react/24/outline";
 
 import LogoutButton from "@/components/layout/LogoutButton";
@@ -286,7 +287,13 @@ export default function AdminPanelPage() {
                 </button>
               </div>
             )}
-
+            {/* Username*/}
+            {user?.email && (
+              <span className="flex items-center text-stone-700 text-sm mr-2" title={user.email}>
+                <UserCircleIcon className="w-5 h-5 mr-1 text-stone-500" />
+                {user.email}
+              </span>
+            )}
             {/* Visible Logout button */}
             <LogoutButton />
           </div>
