@@ -324,17 +324,43 @@ export default function ProductDetailsPage() {
   useEffect(() => { if (editingTitle) titleInputRef.current?.focus(); }, [editingTitle]);
   useEffect(() => { if (editingDesc)  descTextareaRef.current?.focus(); }, [editingDesc]);
 
-  // recompute mapping when colours/images change
+  function mapsEqual(a: ColourImageMap, b: ColourImageMap) {
+    const ka = Object.keys(a), kb = Object.keys(b);
+    if (ka.length !== kb.length) return false;
+    for (const k of ka) {
+      const av = a[k] ?? { front: null, back: null };
+      const bv = b[k] ?? { front: null, back: null };
+      if (av.front !== bv.front || av.back !== bv.back) return false;
+    }
+    return true;
+  }
+  function buildMergedMap(cList: string[], imgEdges: { node: ImageNode }[], prev: ColourImageMap): ColourImageMap {
+    const seq = buildSequentialMap(cList, imgEdges);
+    const merged: ColourImageMap = {};
+    for (const c of cList) {
+      merged[c] = {
+        front: prev[c]?.front ?? seq[c]?.front ?? null,
+        back:  prev[c]?.back  ?? seq[c]?.back  ?? null,
+      };
+    }
+    return merged;
+  }
+  const lastInputsKeyRef = useRef<string>("");
   useEffect(() => {
-    if (!colours.length) { setColourImageMap({}); return; }
-    setColourImageMap((prev) => {
-      const seq = buildSequentialMap(colours, images);
-      const merged: ColourImageMap = {};
-      for (const c of colours) {
-        merged[c] = { front: prev[c]?.front ?? seq[c]?.front ?? null, back: prev[c]?.back ?? seq[c]?.back ?? null };
-      }
-      return merged;
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+    const imageKeys = images.map(e => e?.node?.id ?? e?.node?.url ?? e?.node?.src ?? "");
+    const key = JSON.stringify({ colours, images: imageKeys });
+
+    if (lastInputsKeyRef.current === key) return;
+    lastInputsKeyRef.current = key;
+
+    if (!colours.length) {
+      setColourImageMap(prev => (Object.keys(prev).length ? {} : prev));
+      return;
+    }
+
+    setColourImageMap(prev => {
+      const next = buildMergedMap(colours, images, prev);
+      return mapsEqual(prev, next) ? prev : next;
     });
   }, [colours, images]);
 
@@ -443,25 +469,54 @@ export default function ProductDetailsPage() {
   // Save Options (metafields)
   async function handleSaveMetafields() {
     if (!product) return;
+
+    const poPayload =
+      productOwner && productOwner !== "None@Set.test"
+        ? { email: productOwner }
+        : { email: "" };
+
+    const daPayload = designArea
+      ? {
+          x: Math.round(designArea.x),
+          y: Math.round(designArea.y),
+          width: Math.round(designArea.width),
+          height: Math.round(designArea.height),
+        }
+      : { x: 0, y: 0, width: 0, height: 0 };
+
+    const body = {
+      id: productId,
+      customImage,
+      customText,
+      customColours,
+      colours,          
+      colourImageMap,
+      customImagePrice,
+      customTextPrice,
+      customColoursPrice,
+      productOwner: poPayload,
+      designArea: daPayload,
+    };
+
     try {
       const res = await fetch("/api/update-metafields", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: productId,
-          customImage, customText, customColours,
-          colours, colourImageMap,
-          customImagePrice, customTextPrice, customColoursPrice,
-          productOwner: productOwner === "" ? "None@Set.test" : productOwner,
-          designArea: designArea
-            ? { x: Math.round(designArea.x), y: Math.round(designArea.y), width: Math.round(designArea.width), height: Math.round(designArea.height) }
-            : null,
-        }),
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
       });
+
       const text = await res.text();
       let json: any; try { json = JSON.parse(text); } catch { json = { parseError: true, body: text }; }
+
       if (!res.ok) {
-        const msg = json?.error || json?.userErrors?.[0]?.message || json?.raw?.errors?.[0]?.message || json?.rawText || "Unknown error";
-        return alert(`Save failed:\n${msg}`);
+        const msg =
+          json?.error ||
+          json?.userErrors?.[0]?.message ||
+          json?.raw?.errors?.[0]?.message ||
+          json?.rawText ||
+          "Unknown error";
+        alert(`Save failed:\n${msg}`);
+        return;
       }
       await loadProduct();
       alert("Options saved!");
@@ -469,6 +524,7 @@ export default function ProductDetailsPage() {
       alert(`Network error: ${e?.message || e}`);
     }
   }
+
 
   // Colour input helpers
   function normalizeHexInput(value: string): string {
@@ -555,7 +611,6 @@ export default function ProductDetailsPage() {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
-
 
   // Delete current image
   async function deleteCurrentImage() {
@@ -1011,7 +1066,6 @@ export default function ProductDetailsPage() {
                     </div>
                   )}
                 </div>
-
 
                 {/* Custom Text */}
                 <div>
