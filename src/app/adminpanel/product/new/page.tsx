@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useUser } from "@/components/UserContext";
 import {
   ArrowLeftIcon,
   PlusIcon,
@@ -36,6 +37,8 @@ export default function AddProductPage() {
   const [customImagePrice, setCustomImagePrice] = useState("0");
   const [customTextPrice, setCustomTextPrice] = useState("0");
   const [customColoursPrice, setCustomColoursPrice] = useState("0");
+  const { user } = useUser();
+  const currentUserRole = user?.role || "";
 
   // Colours UI
   const [colours, setColours] = useState<string[]>([]);
@@ -285,7 +288,7 @@ export default function AddProductPage() {
           designArea: designArea
             ? { x: Math.round(designArea.x), y: Math.round(designArea.y), width: Math.round(designArea.width), height: Math.round(designArea.height) }
             : null,
-          productOwner: "None@Set.test",
+          productOwner: currentUserRole === "designer" ? user?.email || "" : "None@Set.test",
         }),
       }).catch(() => { /* ignore */ });
 
