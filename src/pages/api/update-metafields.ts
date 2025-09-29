@@ -42,7 +42,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     customImagePrice,
     customTextPrice,
     customColoursPrice,
-    productOwner,  // string email from UI
+    productOwner,  // now expected as a plain string
     designArea,    // {x,y,width,height} (0..800)
   } = req.body as {
     id?: string;
@@ -65,7 +65,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const cleanDesignArea: DesignArea800 = sanitiseDesignArea800(designArea);
 
-  // 1) Read current metafield *instances* (their types if present)
   const getQuery = `
     query mf($id: ID!) {
       product(id: $id) {
@@ -82,7 +81,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   `;
 
-  // 2) Try to read metafield *definitions* (may fail due to scopes/plan)
+  // Optional: definitions (we’ll still hard-force single_line_text_field for product_owner)
   const defsQuery = `
     query defs {
       shop {
@@ -119,7 +118,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const current = (getJson as any)?.data?.product ?? {};
 
-    // Build a definition map *if* defs query succeeded; otherwise leave empty.
     let defTypeByKey: Record<string, string> = {};
     if (defsRes.ok && !(defsJson as any)?.errors) {
       const nodes: Array<{ key: string; type?: { name?: string } }> =
@@ -129,12 +127,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           .filter(n => n?.key && n?.type?.name)
           .map(n => [n.key, String(n.type!.name!)])
       );
-    } else {
-      // Soft-fail: continue with empty map (we’ll use fallbacks below)
-      console.warn("[update-metafields] metafieldDefinitions unavailable. Proceeding with fallbacks.");
     }
 
-    // Helper: resolve type — prefer definition, else instance type, else hard-coded fallback
     const fallbackByKey: Record<string, string> = {
       custom_image: "boolean",
       custom_text: "boolean",
@@ -143,7 +137,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       custom_image_price_variable: "number_decimal",
       custom_text_price_variable: "number_decimal",
       colour_customisation_price_variable: "number_decimal",
-      product_owner: "single_line_text_field",   // prefer json; instance may override
+      product_owner: "single_line_text_field",
       design_area: "json",
     };
     const resolveType = (key: string, instanceType?: string): string =>
@@ -208,27 +202,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       value: formatDecimal(customColoursPrice),
     });
 
-    // product_owner: honor def/instance type. If json -> send { email: string }
-    const poType = resolveType("product_owner", current.po?.type);
-    if (poType === "json") {
-      const emailStr = String(productOwner || "").trim();
-      const poObject = { email: emailStr };
-      inputs.push({
-        ownerId: id!,
-        namespace: "custom",
-        key: "product_owner",
-        type: "single_line_text_field",
-        value: String(productOwner ?? ""),
-      });
-    } else {
-      inputs.push({
-        ownerId: id!,
-        namespace: "custom",
-        key: "product_owner",
-        type: poType, // e.g., single_line_text_field
-        value: String(productOwner || ""),
-      });
-    }
+    // Force single_line_text_field for product_owner and send a plain string
+    inputs.push({
+      ownerId: id!,
+      namespace: "custom",
+      key: "product_owner",
+      type: "single_line_text_field",
+      value: String(productOwner ?? "").trim(),
+    });
 
     if (cleanDesignArea) {
       inputs.push({
