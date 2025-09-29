@@ -109,7 +109,6 @@ export default function ProductCard({
 				</div>
 
 				{/* Description */}
-				{/* TODO: Implement something about the designer somewhere in the description */}
 				{description && (
 					<div className="mb-4 bg-lime-50 p-3 rounded-2xl border-2 border-lime-200">
 						<p className="text-gray-800 text-sm font-medium line-clamp-2">
