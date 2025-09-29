@@ -470,10 +470,11 @@ export default function ProductDetailsPage() {
   async function handleSaveMetafields() {
     if (!product) return;
 
-    const poPayload =
+    const ownerStr =
       productOwner && productOwner !== "None@Set.test"
-        ? { email: productOwner }
-        : { email: "" };
+        ? productOwner
+        : "";
+
 
     const daPayload = designArea
       ? {
@@ -494,7 +495,7 @@ export default function ProductDetailsPage() {
       customImagePrice,
       customTextPrice,
       customColoursPrice,
-      productOwner: poPayload,
+      productOwner: ownerStr,
       designArea: daPayload,
     };
 

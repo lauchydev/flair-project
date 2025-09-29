@@ -4,17 +4,13 @@ const ADMIN_API = "https://flairtester.myshopify.com/admin/api/2024-07/graphql.j
 const ADMIN_TOKEN = process.env.SHOPIFY_ADMIN_TOKEN || "";
 
 function safeParse(txt: string) {
-  try {
-    return JSON.parse(txt);
-  } catch {
-    return { parseError: true, body: txt };
-  }
+  try { return JSON.parse(txt); } catch { return { parseError: true, body: txt }; }
 }
 
 function formatDecimal(value: any): string {
   const n = parseFloat(value);
-  if (Number.isFinite(n)) return n.toFixed(2);
-  return "0.00";
+  if (isNaN(n)) return "0.00";
+  return n.toFixed(2);
 }
 
 type DesignArea800 = { x: number; y: number; width: number; height: number } | null;
@@ -46,22 +42,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     customImagePrice,
     customTextPrice,
     customColoursPrice,
-    productOwner,
-    designArea,
-  } = (req.body || {}) as {
+    productOwner,  // now expected as a plain string
+    designArea,    // {x,y,width,height} (0..800)
+  } = req.body as {
     id?: string;
     customImage?: boolean;
     customText?: boolean;
     customColours?: boolean;
     colours?: string[];
-    customImagePrice?: string | number;
-    customTextPrice?: string | number;
-    customColoursPrice?: string | number;
+    customImagePrice?: string;
+    customTextPrice?: string;
+    customColoursPrice?: string;
     productOwner?: string;
     designArea?: any;
   };
 
-  if (!id) return res.status(200).json({ ok: false, errors: [{ message: "Missing product id" }] });
+  if (!id) return res.status(400).json({ error: "Missing product id" });
 
   const cleanColours: string[] = (colours || [])
     .map((v) => String(v ?? "").trim().toLowerCase())
@@ -72,19 +68,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const getQuery = `
     query mf($id: ID!) {
       product(id: $id) {
-        ci:   metafield(namespace: "custom", key: "custom_image") { type id }
-        ct:   metafield(namespace: "custom", key: "custom_text") { type id }
-        cc:   metafield(namespace: "custom", key: "color_customisation") { type id }
-        ca:   metafield(namespace: "custom", key: "colours_available") { type id }
+        ci: metafield(namespace: "custom", key: "custom_image") { type id }
+        ct: metafield(namespace: "custom", key: "custom_text") { type id }
+        cc: metafield(namespace: "custom", key: "color_customisation") { type id }
+        ca: metafield(namespace: "custom", key: "colours_available") { type id }
         cipv: metafield(namespace: "custom", key: "custom_image_price_variable") { type id }
         ctpv: metafield(namespace: "custom", key: "custom_text_price_variable") { type id }
         ccpv: metafield(namespace: "custom", key: "colour_customisation_price_variable") { type id }
-        po:   metafield(namespace: "custom", key: "product_owner") { type id }
-        da:   metafield(namespace: "custom", key: "design_area") { type id }
+        po: metafield(namespace: "custom", key: "product_owner") { type id }
+        da: metafield(namespace: "custom", key: "design_area") { type id }
       }
     }
   `;
 
+  // Optional: definitions (we’ll still hard-force single_line_text_field for product_owner)
   const defsQuery = `
     query defs {
       shop {
@@ -111,11 +108,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const getText = await getRes.text();
     const defsText = await defsRes.text();
+
     const getJson = safeParse(getText);
     const defsJson = safeParse(defsText);
 
     if (!getRes.ok || (getJson as any)?.errors) {
-      return res.status(200).json({ ok: false, errors: [{ message: "Failed to read current metafields" }], raw: getJson });
+      return res.status(400).json({ error: "Failed to read current metafields", rawText: getText, raw: getJson });
     }
 
     const current = (getJson as any)?.data?.product ?? {};
@@ -124,7 +122,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (defsRes.ok && !(defsJson as any)?.errors) {
       const nodes: Array<{ key: string; type?: { name?: string } }> =
         (defsJson as any)?.data?.shop?.metafieldDefinitions?.nodes ?? [];
-      defTypeByKey = Object.fromEntries(nodes.filter((n) => n?.key && n?.type?.name).map((n) => [n.key, String(n.type!.name!)]));
+      defTypeByKey = Object.fromEntries(
+        nodes
+          .filter(n => n?.key && n?.type?.name)
+          .map(n => [n.key, String(n.type!.name!)])
+      );
     }
 
     const fallbackByKey: Record<string, string> = {
@@ -144,22 +146,80 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     type MFInput = { ownerId: string; namespace: string; key: string; type: string; value: string };
     const inputs: MFInput[] = [];
 
-    inputs.push({ ownerId: id, namespace: "custom", key: "custom_image", type: resolveType("custom_image", current.ci?.type), value: String(!!customImage) });
-    inputs.push({ ownerId: id, namespace: "custom", key: "custom_text", type: resolveType("custom_text", current.ct?.type), value: String(!!customText) });
-    inputs.push({ ownerId: id, namespace: "custom", key: "color_customisation", type: resolveType("color_customisation", current.cc?.type), value: String(!!customColours) });
-    inputs.push({ ownerId: id, namespace: "custom", key: "colours_available", type: resolveType("colours_available", current.ca?.type), value: JSON.stringify(cleanColours) });
-    inputs.push({ ownerId: id, namespace: "custom", key: "custom_image_price_variable", type: resolveType("custom_image_price_variable", current.cipv?.type), value: formatDecimal(customImagePrice) });
-    inputs.push({ ownerId: id, namespace: "custom", key: "custom_text_price_variable", type: resolveType("custom_text_price_variable", current.ctpv?.type), value: formatDecimal(customTextPrice) });
-    inputs.push({ ownerId: id, namespace: "custom", key: "colour_customisation_price_variable", type: resolveType("colour_customisation_price_variable", current.ccpv?.type), value: formatDecimal(customColoursPrice) });
+    inputs.push({
+      ownerId: id!,
+      namespace: "custom",
+      key: "custom_image",
+      type: resolveType("custom_image", current.ci?.type),
+      value: String(!!customImage),
+    });
 
-    const poType = resolveType("product_owner", current.po?.type);
-    if (poType === "json") {
-      inputs.push({ ownerId: id, namespace: "custom", key: "product_owner", type: "json", value: JSON.stringify({ email: String(productOwner || "") }) });
-    } else {
-      inputs.push({ ownerId: id, namespace: "custom", key: "product_owner", type: poType, value: String(productOwner || "") });
+    inputs.push({
+      ownerId: id!,
+      namespace: "custom",
+      key: "custom_text",
+      type: resolveType("custom_text", current.ct?.type),
+      value: String(!!customText),
+    });
+
+    inputs.push({
+      ownerId: id!,
+      namespace: "custom",
+      key: "color_customisation",
+      type: resolveType("color_customisation", current.cc?.type),
+      value: String(!!customColours),
+    });
+
+    inputs.push({
+      ownerId: id!,
+      namespace: "custom",
+      key: "colours_available",
+      type: resolveType("colours_available", current.ca?.type),
+      value: JSON.stringify(cleanColours),
+    });
+
+    inputs.push({
+      ownerId: id!,
+      namespace: "custom",
+      key: "custom_image_price_variable",
+      type: resolveType("custom_image_price_variable", current.cipv?.type),
+      value: formatDecimal(customImagePrice),
+    });
+
+    inputs.push({
+      ownerId: id!,
+      namespace: "custom",
+      key: "custom_text_price_variable",
+      type: resolveType("custom_text_price_variable", current.ctpv?.type),
+      value: formatDecimal(customTextPrice),
+    });
+
+    inputs.push({
+      ownerId: id!,
+      namespace: "custom",
+      key: "colour_customisation_price_variable",
+      type: resolveType("colour_customisation_price_variable", current.ccpv?.type),
+      value: formatDecimal(customColoursPrice),
+    });
+
+    // Force single_line_text_field for product_owner and send a plain string
+    inputs.push({
+      ownerId: id!,
+      namespace: "custom",
+      key: "product_owner",
+      type: "single_line_text_field",
+      value: String(productOwner ?? "").trim(),
+    });
+
+    if (cleanDesignArea) {
+      inputs.push({
+        ownerId: id!,
+        namespace: "custom",
+        key: "design_area",
+        type: current.da?.type || "json",
+        value: JSON.stringify(cleanDesignArea),
+      });
     }
-
-    inputs.push({ ownerId: id, namespace: "custom", key: "design_area", type: resolveType("design_area", current.da?.type), value: JSON.stringify(cleanDesignArea ?? null) });
 
     const setMutation = `
       mutation setMetafields($metafields: [MetafieldsSetInput!]!) {
@@ -184,15 +244,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const userErrors = result?.userErrors || [];
 
     if (topErrors.length) {
-      return res.status(200).json({ ok: false, errors: [{ message: topErrors[0]?.message || "Shopify GraphQL error" }], attempted: inputs.map((i) => ({ key: i.key, type: i.type })), raw: setJson });
+      return res.status(400).json({
+        error: topErrors[0]?.message || "Shopify GraphQL error",
+        rawText: setText,
+        raw: setJson,
+      });
+    }
+    if (!setRes.ok || !result) {
+      return res.status(400).json({ error: "Unexpected Shopify response (no metafieldsSet)", rawText: setText, raw: setJson });
+    }
+    if (userErrors.length) {
+      return res.status(400).json({
+        error: userErrors[0]?.message || "Shopify update failed",
+        userErrors,
+        attemptedTypes: inputs.map(i => ({ key: i.key, type: i.type })),
+        rawText: setText,
+        raw: setJson,
+      });
     }
 
-    if (!result) {
-      return res.status(200).json({ ok: false, errors: [{ message: "Unexpected Shopify response (no metafieldsSet)" }], attempted: inputs.map((i) => ({ key: i.key, type: i.type })), raw: setJson });
-    }
-
-    return res.status(200).json({ ok: userErrors.length === 0, updated: result.metafields || [], errors: userErrors.map((e: any) => ({ field: e.field, message: e.message })) });
+    return res.status(200).json({ ok: true, metafields: result.metafields || [] });
   } catch (e: any) {
-    return res.status(200).json({ ok: false, errors: [{ message: e?.message || "Failed to update metafields" }] });
+    console.error("update-metafields fatal:", e);
+    return res.status(500).json({ error: e?.message || "Failed to update metafields" });
   }
 }
