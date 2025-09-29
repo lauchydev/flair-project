@@ -53,8 +53,6 @@ export default function ProductsGrid({
 		fetchProducts();
 	};
 
-	// TODO: Maybe add a filter? filter by designer or something
-
 	if (loading) {
 		return (
 			<div className="flex flex-col items-center justify-center py-16">
