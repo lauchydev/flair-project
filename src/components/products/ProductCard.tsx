@@ -27,6 +27,9 @@ export default function ProductCard({
 	const hasMultiplePrices =
 		priceRange.minVariantPrice.amount !== priceRange.maxVariantPrice.amount;
 
+	// Conditions for product to be unavailable for customisation
+	const isUnavailable = !availableForSale || totalInventory === 0;
+
 	return (
 		<div
 			className={`group relative bg-white rounded-3xl overflow-hidden border-4 border-black shadow-xl hover:shadow-lg hover:scale-102 transition-all duration-200 ${className}`}
@@ -106,7 +109,6 @@ export default function ProductCard({
 				</div>
 
 				{/* Description */}
-				{/* TODO: Implement something about the designer somewhere in the description */}
 				{description && (
 					<div className="mb-4 bg-lime-50 p-3 rounded-2xl border-2 border-lime-200">
 						<p className="text-gray-800 text-sm font-medium line-clamp-2">
@@ -137,24 +139,23 @@ export default function ProductCard({
 				</div>
 
 				{/* Creative Action Buttons */}
-				{/** TODO: Remove add to cart button and just use customize & Disable customize button if product is out of stock */}
 				<div className="flex gap-3">
-					<Link
-						href={`/products/${handle}`}
-						className="bg-lime-400 text-black px-6 py-3 rounded-2xl border-4 border-black font-black text-sm flex-1 text-center hover:bg-lime-300 hover:scale-105 transition-all duration-150 shadow-lg"
-					>
-						🎨 CUSTOMISE
-					</Link>
-					<button
-						onClick={() => {
-							// TODO: Implement add to cart functionality
-							console.log(`Adding ${title} to cart`);
-						}}
-						disabled={!availableForSale || totalInventory === 0}
-						className="bg-black text-white px-6 py-3 rounded-2xl border-4 border-black font-black text-sm flex-1 hover:bg-gray-800 hover:scale-105 transition-all duration-150 shadow-lg disabled:bg-gray-300 disabled:cursor-not-allowed disabled:transform-none"
-					>
-						🛒 ADD TO CART
-					</button>
+					{isUnavailable ? (
+						<div
+							className="bg-lime-400 text-black px-6 py-3 rounded-2xl border-4 border-black font-black text-sm flex-1 text-center opacity-50 grayscale cursor-not-allowed shadow-lg"
+							aria-disabled="true"
+							title="Out of stock"
+						>
+							🎨 CUSTOMISE
+						</div>
+					) : (
+						<Link
+							href={`/products/${handle}`}
+							className="bg-lime-400 text-black px-6 py-3 rounded-2xl border-4 border-black font-black text-sm flex-1 text-center hover:bg-lime-300 hover:scale-105 transition-all duration-150 shadow-lg"
+						>
+							🎨 CUSTOMISE
+						</Link>
+					)}
 				</div>
 			</div>
 		</div>
