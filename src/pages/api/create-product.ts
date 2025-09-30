@@ -13,7 +13,55 @@ const need = (k: string) => {
   if (!v) throw new Error(`Missing env: ${k}`);
   return v.trim();
 };
+
 const isNum = (s: any) => s != null && s !== "" && !Number.isNaN(Number(s));
+const asMoney = (s: string) => {
+  const n = Number(s);
+  if (Number.isNaN(n)) return "0.00";
+  return n.toFixed(2);
+};
+const gidToId = (gid: string | undefined | null): string | null => {
+  if (!gid) return null;
+  const parts = String(gid).split("/");
+  return parts[parts.length - 1] || null;
+};
+
+async function gql<T>(
+  url: string,
+  token: string,
+  query: string,
+  variables?: Record<string, any>
+): Promise<{ data?: T; errors?: any; raw: any; status: number }> {
+  const r = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
+    body: JSON.stringify({ query, variables }),
+  });
+  const status = r.status;
+  const rawText = await r.text();
+  let raw: any;
+  try { raw = JSON.parse(rawText); } catch { raw = { rawText }; }
+  return { data: raw?.data, errors: raw?.errors, raw, status };
+}
+
+async function rest<T>(
+  url: string,
+  token: string,
+  method: "GET" | "POST" | "PUT" | "DELETE",
+  body?: any
+): Promise<{ ok: boolean; status: number; json: any; text: string }> {
+  const r = await fetch(url, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      "X-Shopify-Access-Token": token,
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const text = await r.text();
+  let json: any; try { json = JSON.parse(text); } catch { json = { raw: text }; }
+  return { ok: r.ok, status: r.status, json, text };
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   res.setHeader("Content-Type", "application/json");
@@ -23,91 +71,166 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { title, descriptionHtml, price, sku, barcode } = (req.body || {}) as CreateBody;
 
     if (!title || !descriptionHtml || !price) {
-      return res.status(200).json({
+      return res.status(400).json({
         ok: false,
+        step: "validate",
         reason: "bad_input",
         missing: { title: !title, descriptionHtml: !descriptionHtml, price: !price },
       });
     }
     if (!isNum(price)) {
-      return res.status(200).json({ ok: false, reason: "bad_price", hint: "Use a number-like string, e.g. '19.99'" });
+      return res.status(400).json({ ok: false, step: "validate", reason: "bad_price", hint: "Use a number-like string, e.g. '19.99'" });
     }
 
-    const ADMIN_API = need("NEXT_PUBLIC_SHOPIFY_ADMIN_API");
+    const ADMIN_API = need("NEXT_PUBLIC_SHOPIFY_ADMIN_API"); 
     const TOKEN = need("SHOPIFY_ADMIN_TOKEN");
+    const ADMIN_REST = ADMIN_API.replace(/\/graphql\.json$/i, "");
 
-    const CREATE_PRODUCT = `
+    const warnings: string[] = [];
+
+    const PRODUCT_CREATE = `
       mutation CreateProduct($input: ProductInput!) {
         productCreate(input: $input) {
-          product { id title handle status }
+          product { id status title handle }
           userErrors { field message }
         }
       }
     `;
-    const createVars = {
-      input: {
-        title,
-        descriptionHtml,
-      },
-    };
-
-    const r1 = await fetch(ADMIN_API, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": TOKEN },
-      body: JSON.stringify({ query: CREATE_PRODUCT, variables: createVars }),
-    });
-    const t1 = await r1.text();
-    let j1: any;
-    try { j1 = JSON.parse(t1); } catch {
-      return res.status(200).json({ ok: false, step: "productCreate", reason: "non_json_from_shopify", http: { status: r1.status, statusText: r1.statusText }, raw: t1.slice(0, 1500) });
+    const pc = await gql<{
+      productCreate?: { product?: { id: string }, userErrors?: { field?: string[] | null, message: string }[] }
+    }>(
+      ADMIN_API,
+      TOKEN,
+      PRODUCT_CREATE,
+      { input: { title, descriptionHtml, status: "ACTIVE" } }
+    );
+    const pcErr = pc.errors || pc.data?.productCreate?.userErrors;
+    const productGid = pc.data?.productCreate?.product?.id;
+    if (pcErr?.length || !productGid) {
+      return res.status(400).json({ ok: false, step: "productCreate", errors: pcErr, raw: pc.raw });
     }
-    if (!r1.ok) return res.status(200).json({ ok: false, step: "productCreate", reason: "transport_error", http: { status: r1.status, statusText: r1.statusText }, json: j1 });
-    if (j1.errors?.length) return res.status(200).json({ ok: false, step: "productCreate", reason: "graphql_errors", errors: j1.errors });
-    if (j1.data?.productCreate?.userErrors?.length) return res.status(200).json({ ok: false, step: "productCreate", reason: "user_errors", userErrors: j1.data.productCreate.userErrors });
 
-    const product = j1.data?.productCreate?.product;
-    const productId: string | undefined = product?.id;
-    if (!productId) return res.status(200).json({ ok: false, step: "productCreate", reason: "no_product_id", json: j1 });
+    const productIdNum = gidToId(productGid);
+    if (!productIdNum) {
+      return res.status(400).json({ ok: false, step: "parse_product_id", reason: "could_not_parse_numeric_id", gid: productGid });
+    }
 
-    const CREATE_VARIANT = /* GraphQL */ `
-      mutation CreateVariant($productId: ID!, $input: ProductVariantInput!) {
-        productVariantCreate(productId: $productId, input: $input) {
-          product { id }
-          productVariant { id price sku barcode }
-          userErrors { field message }
-        }
-      }
-    `;
-    const variantInput: Record<string, any> = { price: String(price) };
-    if (sku) variantInput.sku = sku;
-    if (barcode) variantInput.barcode = barcode;
-
-    const r2 = await fetch(ADMIN_API, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": TOKEN },
-      body: JSON.stringify({ query: CREATE_VARIANT, variables: { productId, input: variantInput } }),
-    });
-    const t2 = await r2.text();
-    let j2: any;
-    try { j2 = JSON.parse(t2); } catch {
-      return res.status(200).json({
-        ok: false, step: "productVariantCreate", reason: "non_json_from_shopify",
-        http: { status: r2.status, statusText: r2.statusText }, raw: t2.slice(0, 1500), product,
+    const pGet = await rest<any>(`${ADMIN_REST}/products/${productIdNum}.json`, TOKEN, "GET");
+    if (!pGet.ok) {
+      return res.status(400).json({
+        ok: false, step: "productFetchREST", status: pGet.status, error: pGet.json?.errors || pGet.text
       });
     }
-    if (!r2.ok) return res.status(200).json({ ok: false, step: "productVariantCreate", reason: "transport_error", http: { status: r2.status, statusText: r2.statusText }, json: j2, product });
-    if (j2.errors?.length) return res.status(200).json({ ok: false, step: "productVariantCreate", reason: "graphql_errors", errors: j2.errors, product });
-    if (j2.data?.productVariantCreate?.userErrors?.length) {
-      return res.status(200).json({ ok: false, step: "productVariantCreate", reason: "user_errors", userErrors: j2.data.productVariantCreate.userErrors, product });
+
+    let variantIdNum: number | null = null;
+    let inventoryItemIdNum: number | null = null;
+
+    const variants: any[] = pGet.json?.product?.variants || [];
+    if (variants.length > 0) {
+      variantIdNum = variants[0]?.id ?? null;
+      inventoryItemIdNum = variants[0]?.inventory_item_id ?? null;
+    } else {
+      const vCreate = await rest<any>(`${ADMIN_REST}/products/${productIdNum}/variants.json`, TOKEN, "POST", {
+        variant: {
+          option1: "Default Title",
+        },
+      });
+      if (!vCreate.ok || !vCreate.json?.variant?.id) {
+        return res.status(400).json({
+          ok: false,
+          step: "variantCreateREST",
+          status: vCreate.status,
+          error: vCreate.json?.errors || vCreate.text || "variant creation failed",
+        });
+      }
+      variantIdNum = vCreate.json.variant.id;
+      inventoryItemIdNum = vCreate.json.variant.inventory_item_id ?? null;
     }
 
-    const variant = j2.data?.productVariantCreate?.productVariant;
-    if (!variant?.id) {
-      return res.status(200).json({ ok: false, step: "productVariantCreate", reason: "no_variant_id", json: j2, product });
+    const vUpdate = await rest<any>(`${ADMIN_REST}/variants/${variantIdNum}.json`, TOKEN, "PUT", {
+      variant: {
+        id: variantIdNum,
+        price: asMoney(price),
+        ...(sku ? { sku } : {}),
+        ...(barcode ? { barcode } : {}),
+      },
+    });
+    if (!vUpdate.ok) {
+      return res.status(400).json({
+        ok: false,
+        step: "variantUpdateREST",
+        status: vUpdate.status,
+        error: vUpdate.json?.errors || vUpdate.text || "variant update failed",
+      });
     }
 
-    return res.status(200).json({ ok: true, product, variant });
+    inventoryItemIdNum = (vUpdate.json?.variant?.inventory_item_id ?? inventoryItemIdNum) || null;
+
+    if (inventoryItemIdNum != null) {
+      const invPut = await rest<any>(`${ADMIN_REST}/inventory_items/${inventoryItemIdNum}.json`, TOKEN, "PUT", {
+        inventory_item: { id: inventoryItemIdNum, tracked: true },
+      });
+      if (!invPut.ok) {
+        warnings.push(`inventoryItem.tracked not enabled (HTTP ${invPut.status}) — likely missing write_inventory.`);
+      }
+    } else {
+      warnings.push("No inventory_item_id available to enable tracking.");
+    }
+
+    const PUBS = `
+      query Pubs($first: Int!) {
+        publications(first: $first) {
+          edges { node { id name catalog { title } } }
+        }
+      }
+    `;
+    const pq = await gql<{ publications?: { edges: { node: { id: string; name?: string | null; catalog?: { title?: string | null } | null } }[] } }>(
+      ADMIN_API, TOKEN, PUBS, { first: 100 }
+    );
+
+    if (pq.status === 200 && pq.data?.publications?.edges) {
+      const pubs = pq.data.publications.edges.map(e => e.node);
+      const onlineStorePub = pubs.find(n => {
+        const a = (n?.name || "").toLowerCase();
+        const b = (n?.catalog?.title || "").toLowerCase();
+        return a.includes("online store") || b.includes("online store") || a === "online" || b === "online";
+      });
+
+      if (onlineStorePub?.id) {
+        const PUBLISH = `
+          mutation Pub($id: ID!, $publicationId: ID!) {
+            publishablePublish(id: $id, publicationId: $publicationId) {
+              userErrors { field message }
+            }
+          }
+        `;
+        const pub = await gql<{ publishablePublish?: { userErrors?: { message: string }[] } }>(
+          ADMIN_API, TOKEN, PUBLISH, { id: productGid, publicationId: onlineStorePub.id }
+        );
+        const pubErr = pub.errors || pub.data?.publishablePublish?.userErrors;
+        if (pubErr?.length) {
+          warnings.push(`publishablePublish failed — likely missing publications scopes (${pubErr[0]?.message || "unknown"})`);
+        }
+      } else {
+        warnings.push("Online Store publication not found or not accessible (likely missing read_publications).");
+      }
+    } else {
+      warnings.push("Could not query publications (likely missing read_publications).");
+    }
+
+    return res.status(200).json({
+      ok: true,
+      warnings,
+      product: { id: productGid, title, descriptionHtml },
+      variant: {
+        id: variantIdNum ? `gid://shopify/ProductVariant/${variantIdNum}` : null,
+        inventoryItemId: inventoryItemIdNum ? `gid://shopify/InventoryItem/${inventoryItemIdNum}` : null,
+        price: asMoney(price),
+        sku,
+        barcode,
+      },
+    });
   } catch (e: any) {
-    return res.status(200).json({ ok: false, reason: "server_exception", message: e?.message || String(e) });
+    return res.status(500).json({ ok: false, step: "server", message: e?.message || String(e) });
   }
 }

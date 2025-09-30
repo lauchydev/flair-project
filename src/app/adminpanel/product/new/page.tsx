@@ -21,16 +21,13 @@ type RectAbs = { x: number; y: number; width: number; height: number } | null;
 export default function AddProductPage() {
   const router = useRouter();
 
-  // Required
   const [title, setTitle] = useState("");
   const [descriptionHtml, setDescriptionHtml] = useState("");
   const [price, setPrice] = useState("");
 
-  // Optional basics
   const [sku, setSku] = useState("");
   const [barcode, setBarcode] = useState("");
 
-  // Customisation (metafields)
   const [customImage, setCustomImage] = useState(false);
   const [customText, setCustomText] = useState(false);
   const [customColours, setCustomColours] = useState(false);
@@ -40,27 +37,22 @@ export default function AddProductPage() {
   const { user } = useUser();
   const currentUserRole = user?.role || "";
 
-  // Colours UI
   const [colours, setColours] = useState<string[]>([]);
   const [selectedColour, setSelectedColour] = useState<string | null>(null);
   const [localHexValues, setLocalHexValues] = useState<Record<number, string>>({});
 
-  // Images
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
   const [activeIdx, setActiveIdx] = useState(0);
   const [deletingImage, setDeletingImage] = useState(false);
 
-  // Design area
   const [designMode, setDesignMode] = useState(false);
   const [designArea, setDesignArea] = useState<RectAbs>(null);
 
-  // Display metrics for overlay
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [displaySize, setDisplaySize] = useState<{ w: number; h: number; left: number; top: number } | null>(null);
 
-  // UI
   const [creating, setCreating] = useState(false);
   const [editingDesc, setEditingDesc] = useState(false);
   const descTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -154,8 +146,7 @@ export default function AddProductPage() {
     setPreviews(urls);
     setActiveIdx((i) => Math.max(0, Math.min(i, Math.max(0, urls.length - 1))));
     return () => urls.forEach((u) => URL.revokeObjectURL(u));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingFiles.length]);
+  }, [pendingFiles.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function nextImage() {
     if (!previews.length) return;
@@ -178,7 +169,6 @@ export default function AddProductPage() {
 
   const primaryUrl = previews[activeIdx] || null;
 
-
   function normalizeHexInput(value: string): string {
     let v = value.replace("#", "").trim().toLowerCase();
     v = v.replace(/[^0-9a-f]/g, "").slice(0, 6);
@@ -191,6 +181,7 @@ export default function AddProductPage() {
     if (value.length > 7) value = value.slice(0, 7);
     setLocalHexValues((prev) => ({ ...prev, [idx]: value }));
   }
+
   async function pickColour() {
     // @ts-ignore
     if (window.EyeDropper) {
@@ -252,15 +243,37 @@ export default function AddProductPage() {
           barcode: barcode.trim() || undefined,
         }),
       });
-      const createText = await createRes.text();
-      let createJson: any; try { createJson = JSON.parse(createText); } catch { createJson = { raw: createText }; }
-      if (!createRes.ok || !createJson?.product?.id) {
-        const msg = createJson?.error || createJson?.userErrors?.[0]?.message || createJson?.raw || "Failed to create product";
-        alert(msg);
+
+      const payloadText = await createRes.text();
+      let payload: any; try { payload = JSON.parse(payloadText); } catch { payload = { raw: payloadText }; }
+
+      if (!createRes.ok || !payload?.ok || !payload?.product?.id) {
+        const step = payload?.step ? ` (${payload.step})` : "";
+        const errMsg =
+          payload?.errors?.[0]?.message ||
+          payload?.reason ||
+          payload?.raw ||
+          "Failed to create product";
+        alert(`Create failed${step}: ${errMsg}`);
         return;
       }
-      const productId: string = createJson.product.id;
 
+      const productId: string = payload.product.id;
+
+      if (Array.isArray(payload?.warnings) && payload.warnings.length) {
+        alert(`Created with warnings:\n- ${payload.warnings.join("\n- ")}`);
+      }
+
+      try {
+        localStorage.setItem(
+          `newprod:${productId}`,
+          JSON.stringify({
+            title: title.trim(),
+            descriptionHtml,
+            price: Number(price).toFixed(2),
+          })
+        );
+      } catch {}
 
       if (pendingFiles.length) {
         const fd = new FormData();
@@ -275,7 +288,6 @@ export default function AddProductPage() {
         }
       }
 
-
       await fetch("/api/update-metafields", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -283,15 +295,14 @@ export default function AddProductPage() {
           id: productId,
           customImage, customText, customColours,
           customImagePrice, customTextPrice, customColoursPrice,
-          colours,                   
-          colourImageMap: {},        
+          colours,
+          colourImageMap: {},
           designArea: designArea
             ? { x: Math.round(designArea.x), y: Math.round(designArea.y), width: Math.round(designArea.width), height: Math.round(designArea.height) }
             : null,
           productOwner: currentUserRole === "designer" ? user?.email || "" : "None@Set.test",
         }),
-      }).catch(() => { /* ignore */ });
-
+      }).catch(() => {});
 
       router.replace(`/adminpanel/product/${encodeURIComponent(productId)}`);
     } catch (e: any) {
@@ -301,7 +312,6 @@ export default function AddProductPage() {
     }
   }
 
-  // Shared icon+hover text button
   const IconAction: React.FC<React.PropsWithChildren<{ title: string; onClick?: () => void; disabled?: boolean }>> = ({ children, title, onClick, disabled }) => (
     <button
       type="button"
@@ -316,26 +326,20 @@ export default function AddProductPage() {
 
   return (
     <div className="min-h-screen bg-stone-100">
-      {/* Floating header */}
       <div className="sticky top-0 z-20 px-4 sm:px-6 py-3">
         <div className="relative rounded-2xl border border-stone-200 bg-stone-50/90 backdrop-blur shadow-md ring-1 ring-black/5">
-          {/* Left: back */}
           <div className="absolute left-3 top-1/2 -translate-y-1/2">
             <Link href="/adminpanel" className="inline-flex items-center gap-2 text-stone-700 hover:text-stone-900">
               <ArrowLeftIcon className="h-5 w-5" />
               <span className="hidden sm:inline">Back to Products</span>
             </Link>
           </div>
-
-          {/* Center */}
           <div className="py-2.5 text-center">
             <h1 className="text-lg font-semibold tracking-tight text-stone-800">
               Add New Product
             </h1>
             <p className="text-[11px] text-stone-500">Create a product on Shopify</p>
           </div>
-
-          {/* Right: Create */}
           <div className="absolute right-3 top-1/2 -translate-y-1/2">
             <button
               type="button"
@@ -351,10 +355,8 @@ export default function AddProductPage() {
         </div>
       </div>
 
-      {/* Content */}
       <div className="px-4 sm:px-6 pb-10">
         <div className="mx-auto max-w-7xl grid grid-cols-1 lg:grid-cols-2 gap-5">
-          {/* LEFT: Media card */}
           <div className="rounded-2xl border border-stone-200 bg-stone-50 shadow-sm ring-1 ring-black/5">
             <div
               ref={containerRef}
@@ -371,7 +373,6 @@ export default function AddProductPage() {
                     className="w-full h-full object-contain"
                     onLoad={() => requestAnimationFrame(updateDisplayMetrics)}
                   />
-
                   {overlayRect && (
                     <div
                       className="absolute border-2 border-blue-500/90 bg-blue-500/10 rounded-md"
@@ -383,7 +384,6 @@ export default function AddProductPage() {
                       }}
                     />
                   )}
-
                   {previews.length > 1 && (
                     <>
                       <button
@@ -404,7 +404,6 @@ export default function AddProductPage() {
                       </button>
                     </>
                   )}
-
                   <button
                     onClick={deleteCurrentImage}
                     disabled={deletingImage}
@@ -415,7 +414,6 @@ export default function AddProductPage() {
                   >
                     <TrashIcon className="w-5 h-5 text-rose-600" />
                   </button>
-
                   {designMode && (
                     <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/60 text-white text-xs rounded px-3 py-1 shadow">
                       Click & drag to set the design area.
@@ -426,8 +424,6 @@ export default function AddProductPage() {
                 <div className="text-stone-500">No images yet</div>
               )}
             </div>
-
-            {/* Thumbnails */}
             <div className="px-3">
               <div className="flex gap-2 overflow-x-auto">
                 {previews.map((thumb, idx) => (
@@ -443,8 +439,6 @@ export default function AddProductPage() {
                 ))}
               </div>
             </div>
-
-            {/* Actions row */}
             <div className="px-3 py-3 flex items-center gap-4">
               <IconAction title="Add Images" onClick={() => fileInputRef.current?.click()}>
                 <PlusIcon className="h-5 w-5" />
@@ -452,13 +446,11 @@ export default function AddProductPage() {
                   Add Images
                 </span>
               </IconAction>
-
               {pendingFiles.length > 0 && (
                 <span className="text-xs text-stone-600">
                   {pendingFiles.length} file{pendingFiles.length > 1 ? "s" : ""} ready
                 </span>
               )}
-
               <IconAction title={designMode ? "Finish Design Area" : "Design Area"} onClick={() => setDesignMode((v) => !v)}>
                 <PencilSquareIcon className="h-5 w-5" />
                 <span className="ml-1 max-w-0 opacity-0 transition-all duration-200 ease-out group-hover:max-w-[160px] group-hover:opacity-100 whitespace-nowrap text-sm">
@@ -466,14 +458,10 @@ export default function AddProductPage() {
                 </span>
               </IconAction>
             </div>
-
-            {/* Hidden file input */}
             <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={onFilesChosen} />
           </div>
 
-          {/* RIGHT: Details + Customisation */}
           <div className="space-y-5">
-            {/* Title */}
             <div className="rounded-2xl border border-stone-200 bg-white shadow-sm ring-1 ring-black/5 p-4 sm:p-5">
               <label className="block text-sm text-stone-800">
                 <h4 className="text-lg font-semibold text-stone-900">Title</h4>
@@ -488,7 +476,6 @@ export default function AddProductPage() {
               </label>
             </div>
 
-            {/* Description */}
             <div className="rounded-2xl border border-stone-200 bg-white shadow-sm ring-1 ring-black/5 p-4 sm:p-5">
               <div className="flex items-center gap-2 mb-2">
                 <h4 className="text-lg font-semibold text-stone-900">Description</h4>
@@ -531,7 +518,6 @@ export default function AddProductPage() {
               )}
             </div>
 
-            {/* Basic Details (stacked) */}
             <div className="rounded-2xl border border-stone-200 bg-white shadow-sm ring-1 ring-black/5 p-4 sm:p-5">
               <h4 className="text-lg font-semibold text-stone-900 mb-4">Basic Details</h4>
 
@@ -571,14 +557,12 @@ export default function AddProductPage() {
               </label>
             </div>
 
-            {/* Customisation Options */}
             <div className="rounded-2xl border border-stone-200 bg-stone-50 shadow-sm ring-1 ring-black/5 p-4 sm:p-5">
               <div className="flex items-center justify-between">
                 <h4 className="text-lg font-semibold text-stone-900">Customisation Options</h4>
               </div>
 
               <div className="mt-4 space-y-4">
-                {/* Custom Image */}
                 <div>
                   <label className="inline-flex items-center gap-3 text-stone-800 cursor-pointer">
                     <input
@@ -587,16 +571,8 @@ export default function AddProductPage() {
                       onChange={(e) => setCustomImage(e.target.checked)}
                       className="sr-only"
                     />
-                    <div
-                      className={`relative h-6 w-11 rounded-full transition-colors duration-200 ${
-                        customImage ? "bg-indigo-500" : "bg-stone-300"
-                      }`}
-                    >
-                      <span
-                        className={`absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform duration-200 ${
-                          customImage ? "translate-x-5" : "translate-x-0"
-                        }`}
-                      />
+                    <div className={`relative h-6 w-11 rounded-full transition-colors duration-200 ${customImage ? "bg-indigo-500" : "bg-stone-300"}`}>
+                      <span className={`absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform duration-200 ${customImage ? "translate-x-5" : "translate-x-0"}`} />
                     </div>
                     <span>Custom Image</span>
                   </label>
@@ -617,7 +593,6 @@ export default function AddProductPage() {
                   )}
                 </div>
 
-                {/* Custom Text */}
                 <div>
                   <label className="inline-flex items-center gap-3 text-stone-800 cursor-pointer">
                     <input
@@ -626,16 +601,8 @@ export default function AddProductPage() {
                       onChange={(e) => setCustomText(e.target.checked)}
                       className="sr-only"
                     />
-                    <div
-                      className={`relative h-6 w-11 rounded-full transition-colors duration-200 ${
-                        customText ? "bg-indigo-500" : "bg-stone-300"
-                      }`}
-                    >
-                      <span
-                        className={`absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform duration-200 ${
-                          customText ? "translate-x-5" : "translate-x-0"
-                        }`}
-                      />
+                    <div className={`relative h-6 w-11 rounded-full transition-colors duration-200 ${customText ? "bg-indigo-500" : "bg-stone-300"}`}>
+                      <span className={`absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform duration-200 ${customText ? "translate-x-5" : "translate-x-0"}`} />
                     </div>
                     <span>Custom Text</span>
                   </label>
@@ -656,7 +623,6 @@ export default function AddProductPage() {
                   )}
                 </div>
 
-                {/* Custom Colour */}
                 <div>
                   <label className="inline-flex items-center gap-3 text-stone-800 cursor-pointer">
                     <input
@@ -665,16 +631,8 @@ export default function AddProductPage() {
                       onChange={(e) => setCustomColours(e.target.checked)}
                       className="sr-only"
                     />
-                    <div
-                      className={`relative h-6 w-11 rounded-full transition-colors duration-200 ${
-                        customColours ? "bg-indigo-500" : "bg-stone-300"
-                      }`}
-                    >
-                      <span
-                        className={`absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform duration-200 ${
-                          customColours ? "translate-x-5" : "translate-x-0"
-                        }`}
-                      />
+                    <div className={`relative h-6 w-11 rounded-full transition-colors duration-200 ${customColours ? "bg-indigo-500" : "bg-stone-300"}`}>
+                      <span className={`absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform duration-200 ${customColours ? "translate-x-5" : "translate-x-0"}`} />
                     </div>
                     <span>Custom Colour</span>
                   </label>
@@ -692,7 +650,6 @@ export default function AddProductPage() {
                         />
                       </label>
 
-                      {/* Colours editor */}
                       <div className="mt-4">
                         <div className="inline-flex items-center gap-2 mb-2">
                           <span className="font-medium text-stone-900">Colours Available</span>
@@ -763,7 +720,6 @@ export default function AddProductPage() {
               </div>
             </div>
 
-            {/* Footer actions */}
             <div className="flex items-center gap-3">
               <button
                 type="button"
