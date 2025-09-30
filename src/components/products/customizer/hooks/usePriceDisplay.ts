@@ -9,6 +9,8 @@ export function usePriceDisplay(
         textPrice: number;
         addImage: boolean;
         imagePrice: number;
+        addColor?: boolean;
+        colorPrice?: number;
     }
 ) {
     return useMemo(() => {
@@ -18,6 +20,7 @@ export function usePriceDisplay(
         let extra = 0;
         if (opts.addText) extra += opts.textPrice;
         if (opts.addImage) extra += opts.imagePrice;
+        if (opts.addColor) extra += opts.colorPrice || 0;
         const total = Math.max(0, baseAmount + extra);
         return `$${total.toFixed(2)} ${base.currencyCode}`;
     }, [
@@ -27,5 +30,7 @@ export function usePriceDisplay(
         opts.textPrice,
         opts.addImage,
         opts.imagePrice,
+        opts.addColor,
+        opts.colorPrice,
     ]);
 }

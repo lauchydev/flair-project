@@ -18,10 +18,7 @@ export default function Header() {
     const [cartItemCount, setCartItemCount] = useState(0);
     const { user } = useUser();
     const isLoggedIn = Boolean(user);
-    const showLogout =
-        isLoggedIn &&
-        (pathname?.startsWith("/products") ||
-            pathname?.startsWith("/adminpanel"));
+    const showLogout = isLoggedIn;
     const [mobileOpen, setMobileOpen] = useState(false);
 
     // Load cart item count
@@ -104,7 +101,7 @@ export default function Header() {
                         </Link>
 
                         {showLogout ? (
-                            <LogoutButton className="hidden md:inline-flex px-3 py-2 rounded-lg border border-black/10 bg-white hover:bg-gray-50 text-sm font-semibold" />
+                            <LogoutButton className="hidden md:inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-black/10 bg-white hover:bg-gray-50 text-sm font-semibold transition-colors cursor-pointer" />
                         ) : (
                             <Link
                                 href="/login"
@@ -164,7 +161,7 @@ export default function Header() {
                             </li>
                             <li className="pt-1 border-t border-black/10 mt-1">
                                 {showLogout ? (
-                                    <LogoutButton className="w-full text-left px-3 py-2 rounded-md text-sm font-semibold hover:bg-gray-100" />
+                                    <LogoutButton className="w-full text-left px-3 py-2 rounded-md text-sm font-semibold text-gray-900 hover:bg-gray-100 transition-colors" />
                                 ) : (
                                     <Link
                                         href="/login"
