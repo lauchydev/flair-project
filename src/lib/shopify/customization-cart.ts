@@ -1,72 +1,73 @@
 import type {
-	ProductCustomization,
-	CartCustomAttributes,
+    ProductCustomization,
+    CartCustomAttributes,
 } from "@/types/customization";
+import { createCustomPricingAttributes } from "./custom-pricing";
 
 // Environment variables validation
 const SHOPIFY_STORE_DOMAIN = process.env.NEXT_PUBLIC_SHOPIFY_STORE_DOMAIN;
 const SHOPIFY_STOREFRONT_TOKEN =
-	process.env.NEXT_PUBLIC_SHOPIFY_STOREFRONT_TOKEN;
+    process.env.NEXT_PUBLIC_SHOPIFY_STOREFRONT_TOKEN;
 
 if (!SHOPIFY_STORE_DOMAIN || !SHOPIFY_STOREFRONT_TOKEN) {
-	throw new Error(
-		"Missing required environment variables: NEXT_PUBLIC_SHOPIFY_STORE_DOMAIN and NEXT_PUBLIC_SHOPIFY_STOREFRONT_TOKEN"
-	);
+    throw new Error(
+        "Missing required environment variables: NEXT_PUBLIC_SHOPIFY_STORE_DOMAIN and NEXT_PUBLIC_SHOPIFY_STOREFRONT_TOKEN"
+    );
 }
 
 const VALIDATED_STORE_DOMAIN: string = SHOPIFY_STORE_DOMAIN;
 const VALIDATED_STOREFRONT_TOKEN: string = SHOPIFY_STOREFRONT_TOKEN;
 
 export interface CartItem {
-	id: string;
-	quantity: number;
-	merchandise: {
-		id: string;
-		title: string;
-		selectedOptions: Array<{
-			name: string;
-			value: string;
-		}>;
-		product: {
-			id: string;
-			title: string;
-			handle: string;
-			featuredImage?: {
-				url: string;
-				altText?: string;
-			};
-		};
-	};
-	cost: {
-		totalAmount: {
-			amount: string;
-			currencyCode: string;
-		};
-	};
-	attributes: Array<{
-		key: string;
-		value: string;
-	}>;
+    id: string;
+    quantity: number;
+    merchandise: {
+        id: string;
+        title: string;
+        selectedOptions: Array<{
+            name: string;
+            value: string;
+        }>;
+        product: {
+            id: string;
+            title: string;
+            handle: string;
+            featuredImage?: {
+                url: string;
+                altText?: string;
+            };
+        };
+    };
+    cost: {
+        totalAmount: {
+            amount: string;
+            currencyCode: string;
+        };
+    };
+    attributes: Array<{
+        key: string;
+        value: string;
+    }>;
 }
 
 export interface Cart {
-	id: string;
-	lines: {
-		edges: Array<{
-			node: CartItem;
-		}>;
-	};
-	cost: {
-		totalAmount: {
-			amount: string;
-			currencyCode: string;
-		};
-		subtotalAmount: {
-			amount: string;
-			currencyCode: string;
-		};
-	};
-	checkoutUrl: string;
+    id: string;
+    lines: {
+        edges: Array<{
+            node: CartItem;
+        }>;
+    };
+    cost: {
+        totalAmount: {
+            amount: string;
+            currencyCode: string;
+        };
+        subtotalAmount: {
+            amount: string;
+            currencyCode: string;
+        };
+    };
+    checkoutUrl: string;
 }
 
 const CREATE_CART_MUTATION = `
@@ -312,288 +313,250 @@ const GET_CART_QUERY = `
 `;
 
 export class ShopifyCartAPI {
-	private endpoint: string;
-	private headers: HeadersInit;
+    private endpoint: string;
+    private headers: HeadersInit;
 
-	constructor() {
-		this.endpoint = `${VALIDATED_STORE_DOMAIN}/api/2023-01/graphql.json`;
-		this.headers = {
-			"Content-Type": "application/json",
-			"X-Shopify-Storefront-Access-Token": VALIDATED_STOREFRONT_TOKEN,
-		};
-	}
+    constructor() {
+        this.endpoint = `${VALIDATED_STORE_DOMAIN}/api/2023-01/graphql.json`;
+        this.headers = {
+            "Content-Type": "application/json",
+            "X-Shopify-Storefront-Access-Token": VALIDATED_STOREFRONT_TOKEN,
+        };
+    }
 
-	private async query<T>(
-		query: string,
-		variables?: Record<string, unknown>
-	): Promise<T> {
-		try {
-			const response = await fetch(this.endpoint, {
-				method: "POST",
-				headers: this.headers,
-				body: JSON.stringify({ query, variables }),
-			});
+    private async query<T>(
+        query: string,
+        variables?: Record<string, unknown>
+    ): Promise<T> {
+        try {
+            const response = await fetch(this.endpoint, {
+                method: "POST",
+                headers: this.headers,
+                body: JSON.stringify({ query, variables }),
+            });
 
-			if (!response.ok) {
-				throw new Error(`HTTP error! status: ${response.status}`);
-			}
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
 
-			const result = await response.json();
+            const result = await response.json();
 
-			if (result.errors) {
-				console.error("GraphQL errors:", result.errors);
-				throw new Error(`GraphQL error: ${result.errors[0].message}`);
-			}
+            if (result.errors) {
+                console.error("GraphQL errors:", result.errors);
+                throw new Error(`GraphQL error: ${result.errors[0].message}`);
+            }
 
-			return result.data;
-		} catch (error) {
-			console.error("Shopify Cart API error:", error);
-			throw error;
-		}
-	}
+            return result.data;
+        } catch (error) {
+            console.error("Shopify Cart API error:", error);
+            throw error;
+        }
+    }
 
-	/**
-	 * Create a new cart with customized product
-	 */
-	async createCartWithCustomization(
-		variantId: string,
-		quantity: number,
-		customization: ProductCustomization,
-		previewImageUrl?: string
-	): Promise<Cart> {
-		// Custom attributes for cart
-		const customizationJson = JSON.stringify(customization);
+    /**
+     * Create a new cart with customized product
+     */
+    async createCartWithCustomization(
+        variantId: string,
+        quantity: number,
+        customization: ProductCustomization,
+        previewImageUrl?: string
+    ): Promise<Cart> {
+        // Enhanced attributes with detailed pricing breakdown
+        const attributes = createCustomPricingAttributes(customization);
 
-		const attributes: Array<{ key: string; value: string }> = [
-			{
-				key: "_customization_data",
-				value: customizationJson,
-			},
-			{
-				key: "Customization",
-				value: this.generateCustomizationSummary(customization),
-			},
-			{
-				key: "_custom_price",
-				value: `$${customization.totalPrice.toFixed(2)}`,
-			},
-			{
-				key: "_has_customization",
-				value: "true",
-			},
-		];
+        if (previewImageUrl) {
+            attributes.push({
+                key: "_preview_image_url",
+                value: previewImageUrl,
+            });
+        }
 
-		if (previewImageUrl) {
-			attributes.push({
-				key: "_preview_image_url",
-				value: previewImageUrl,
-			});
-		}
+        if (customization.selectedColor) {
+            attributes.push({
+                key: "_custom_color",
+                value: customization.selectedColor,
+            });
+        }
 
-		if (customization.selectedColor) {
-			attributes.push({
-				key: "_custom_color",
-				value: customization.selectedColor,
-			});
-		}
+        const input = {
+            lines: [
+                {
+                    merchandiseId: variantId,
+                    quantity,
+                    attributes,
+                },
+            ],
+        };
 
-		const input = {
-			lines: [
-				{
-					merchandiseId: variantId,
-					quantity,
-					attributes,
-				},
-			],
-		};
+        const data = await this.query<{
+            cartCreate: { cart: Cart; userErrors: any[] };
+        }>(CREATE_CART_MUTATION, { input });
 
-		const data = await this.query<{
-			cartCreate: { cart: Cart; userErrors: any[] };
-		}>(CREATE_CART_MUTATION, { input });
+        if (data.cartCreate.userErrors.length > 0) {
+            throw new Error(data.cartCreate.userErrors[0].message);
+        }
 
-		if (data.cartCreate.userErrors.length > 0) {
-			throw new Error(data.cartCreate.userErrors[0].message);
-		}
+        if (!data.cartCreate.cart) {
+            throw new Error("Create cart API returned null cart");
+        }
 
-		if (!data.cartCreate.cart) {
-			throw new Error("Create cart API returned null cart");
-		}
+        return data.cartCreate.cart;
+    }
 
-		return data.cartCreate.cart;
-	}
+    /**
+     * Add customized product to existing cart
+     */
+    async addCustomizedProductToCart(
+        cartId: string,
+        variantId: string,
+        quantity: number,
+        customization: ProductCustomization,
+        previewImageUrl?: string
+    ): Promise<Cart> {
+        // Enhanced attributes with detailed pricing breakdown
+        const attributes = createCustomPricingAttributes(customization);
 
-	/**
-	 * Add customized product to existing cart
-	 */
-	async addCustomizedProductToCart(
-		cartId: string,
-		variantId: string,
-		quantity: number,
-		customization: ProductCustomization,
-		previewImageUrl?: string
-	): Promise<Cart> {
-		// Custom attributes for cart
-		const customizationJson = JSON.stringify(customization);
+        if (previewImageUrl) {
+            attributes.push({
+                key: "_preview_image_url",
+                value: previewImageUrl,
+            });
+        }
 
-		const attributes: Array<{ key: string; value: string }> = [
-			{
-				key: "_customization_data",
-				value: customizationJson,
-			},
-			{
-				key: "Customization",
-				value: this.generateCustomizationSummary(customization),
-			},
-			{
-				key: "_custom_price",
-				value: `$${customization.totalPrice.toFixed(2)}`,
-			},
-			{
-				key: "_has_customization",
-				value: "true",
-			},
-		];
+        if (customization.selectedColor) {
+            attributes.push({
+                key: "_custom_color",
+                value: customization.selectedColor,
+            });
+        }
 
-		if (previewImageUrl) {
-			attributes.push({
-				key: "_preview_image_url",
-				value: previewImageUrl,
-			});
-		}
+        const lines = [
+            {
+                merchandiseId: variantId,
+                quantity,
+                attributes,
+            },
+        ];
 
-		if (customization.selectedColor) {
-			attributes.push({
-				key: "_custom_color",
-				value: customization.selectedColor,
-			});
-		}
+        const data = await this.query<{
+            cartLinesAdd: { cart: Cart; userErrors: any[] };
+        }>(ADD_TO_CART_MUTATION, { cartId, lines });
 
-		const lines = [
-			{
-				merchandiseId: variantId,
-				quantity,
-				attributes,
-			},
-		];
+        if (data.cartLinesAdd.userErrors.length > 0) {
+            throw new Error(data.cartLinesAdd.userErrors[0].message);
+        }
 
-		const data = await this.query<{
-			cartLinesAdd: { cart: Cart; userErrors: any[] };
-		}>(ADD_TO_CART_MUTATION, { cartId, lines });
+        if (!data.cartLinesAdd.cart) {
+            throw new Error("Cart API returned null cart");
+        }
 
-		if (data.cartLinesAdd.userErrors.length > 0) {
-			throw new Error(data.cartLinesAdd.userErrors[0].message);
-		}
+        return data.cartLinesAdd.cart;
+    }
 
-		if (!data.cartLinesAdd.cart) {
-			throw new Error("Cart API returned null cart");
-		}
+    /**
+     * Get cart by ID
+     */
+    async getCart(cartId: string): Promise<Cart> {
+        const data = await this.query<{ cart: Cart }>(GET_CART_QUERY, {
+            id: cartId,
+        });
+        return data.cart;
+    }
 
-		return data.cartLinesAdd.cart;
-	}
+    /**
+     * Remove item from cart
+     */
+    async removeFromCart(cartId: string, lineId: string): Promise<Cart> {
+        const data = await this.query<{
+            cartLinesRemove: { cart: Cart; userErrors: any[] };
+        }>(REMOVE_FROM_CART_MUTATION, { cartId, lineIds: [lineId] });
 
-	/**
-	 * Get cart by ID
-	 */
-	async getCart(cartId: string): Promise<Cart> {
-		const data = await this.query<{ cart: Cart }>(GET_CART_QUERY, {
-			id: cartId,
-		});
-		return data.cart;
-	}
+        if (data.cartLinesRemove.userErrors.length > 0) {
+            throw new Error(data.cartLinesRemove.userErrors[0].message);
+        }
 
-	/**
-	 * Remove item from cart
-	 */
-	async removeFromCart(cartId: string, lineId: string): Promise<Cart> {
-		const data = await this.query<{
-			cartLinesRemove: { cart: Cart; userErrors: any[] };
-		}>(REMOVE_FROM_CART_MUTATION, { cartId, lineIds: [lineId] });
+        return data.cartLinesRemove.cart;
+    }
 
-		if (data.cartLinesRemove.userErrors.length > 0) {
-			throw new Error(data.cartLinesRemove.userErrors[0].message);
-		}
+    /**
+     * Extract customization data from cart item
+     */
+    getCustomizationFromCartItem(
+        cartItem: CartItem
+    ): ProductCustomization | null {
+        const customizationAttr = cartItem.attributes.find(
+            (attr) => attr.key === "_customization_data"
+        );
 
-		return data.cartLinesRemove.cart;
-	}
+        if (!customizationAttr) return null;
 
-	/**
-	 * Extract customization data from cart item
-	 */
-	getCustomizationFromCartItem(
-		cartItem: CartItem
-	): ProductCustomization | null {
-		const customizationAttr = cartItem.attributes.find(
-			(attr) => attr.key === "_customization_data"
-		);
+        try {
+            return JSON.parse(customizationAttr.value) as ProductCustomization;
+        } catch (error) {
+            console.error("Error parsing customization data:", error);
+            return null;
+        }
+    }
 
-		if (!customizationAttr) return null;
+    /**
+     * Check if cart item has customizations
+     */
+    hasCustomization(cartItem: CartItem): boolean {
+        return cartItem.attributes.some(
+            (attr) => attr.key === "_has_customization" && attr.value === "true"
+        );
+    }
 
-		try {
-			return JSON.parse(customizationAttr.value) as ProductCustomization;
-		} catch (error) {
-			console.error("Error parsing customization data:", error);
-			return null;
-		}
-	}
+    /**
+     * Generate a readable summary of customization
+     */
+    private generateCustomizationSummary(
+        customization: ProductCustomization
+    ): string {
+        const parts: string[] = [];
 
-	/**
-	 * Check if cart item has customizations
-	 */
-	hasCustomization(cartItem: CartItem): boolean {
-		return cartItem.attributes.some(
-			(attr) => attr.key === "_has_customization" && attr.value === "true"
-		);
-	}
+        // Shirt Color
+        if (customization.selectedColor) {
+            parts.push(`Shirt Color: ${customization.selectedColor}`);
+        }
 
-	/**
-	 * Generate a readable summary of customization
-	 */
-	private generateCustomizationSummary(
-		customization: ProductCustomization
-	): string {
-		const parts: string[] = [];
+        // Check if any text exists
+        const hasText = customization.views.some(
+            (view) => view.textOverlays.length > 0
+        );
+        parts.push(`Custom Text: ${hasText ? "true" : "false"}`);
 
-		// Shirt Color
-		if (customization.selectedColor) {
-			parts.push(`Shirt Color: ${customization.selectedColor}`);
-		}
+        // Text Color (from first text overlay found)
+        if (hasText) {
+            const firstTextOverlay = customization.views
+                .flatMap((view) => view.textOverlays)
+                .find((text) => text);
+            if (firstTextOverlay) {
+                parts.push(`Text Color: ${firstTextOverlay.color}`);
+            }
+        }
 
-		// Check if any text exists
-		const hasText = customization.views.some(
-			(view) => view.textOverlays.length > 0
-		);
-		parts.push(`Custom Text: ${hasText ? "true" : "false"}`);
+        // Location-specific text
+        customization.views.forEach((view) => {
+            if (view.textOverlays.length > 0) {
+                view.textOverlays.forEach((textOverlay) => {
+                    parts.push(`${view.view} Text: ${textOverlay.text}`);
+                });
+            }
+        });
 
-		// Text Color (from first text overlay found)
-		if (hasText) {
-			const firstTextOverlay = customization.views
-				.flatMap((view) => view.textOverlays)
-				.find((text) => text);
-			if (firstTextOverlay) {
-				parts.push(`Text Color: ${firstTextOverlay.color}`);
-			}
-		}
+        // Total images count
+        const totalImages = customization.views.reduce(
+            (total, view) => total + view.imageOverlays.length,
+            0
+        );
+        if (totalImages > 0) {
+            parts.push(`Images: ${totalImages} uploaded`);
+        }
 
-		// Location-specific text
-		customization.views.forEach((view) => {
-			if (view.textOverlays.length > 0) {
-				view.textOverlays.forEach((textOverlay) => {
-					parts.push(`${view.view} Text: ${textOverlay.text}`);
-				});
-			}
-		});
-
-		// Total images count
-		const totalImages = customization.views.reduce(
-			(total, view) => total + view.imageOverlays.length,
-			0
-		);
-		if (totalImages > 0) {
-			parts.push(`Images: ${totalImages} uploaded`);
-		}
-
-		return parts.join(" • ") || "Custom design";
-	}
+        return parts.join(" • ") || "Custom design";
+    }
 }
 
 // Singleton instance
@@ -601,20 +564,20 @@ export const shopifyCart = new ShopifyCartAPI();
 
 // Helper functions for cart management in localStorage
 export const CartStorage = {
-	CART_ID_KEY: "shopify_cart_id",
+    CART_ID_KEY: "shopify_cart_id",
 
-	getCartId(): string | null {
-		if (typeof window === "undefined") return null;
-		return localStorage.getItem(this.CART_ID_KEY);
-	},
+    getCartId(): string | null {
+        if (typeof window === "undefined") return null;
+        return localStorage.getItem(this.CART_ID_KEY);
+    },
 
-	setCartId(cartId: string): void {
-		if (typeof window === "undefined") return;
-		localStorage.setItem(this.CART_ID_KEY, cartId);
-	},
+    setCartId(cartId: string): void {
+        if (typeof window === "undefined") return;
+        localStorage.setItem(this.CART_ID_KEY, cartId);
+    },
 
-	clearCartId(): void {
-		if (typeof window === "undefined") return;
-		localStorage.removeItem(this.CART_ID_KEY);
-	},
+    clearCartId(): void {
+        if (typeof window === "undefined") return;
+        localStorage.removeItem(this.CART_ID_KEY);
+    },
 };

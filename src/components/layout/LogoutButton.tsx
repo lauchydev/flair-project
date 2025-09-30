@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { ArrowRightOnRectangleIcon } from "@heroicons/react/24/outline";
 
 type LogoutButtonProps = {
     className?: string;
@@ -25,10 +26,11 @@ export default function LogoutButton({ className }: LogoutButtonProps) {
             onClick={handleLogout}
             className={
                 className ??
-                "px-3 py-2 rounded-xl border-2 border-black bg-white hover:bg-red-100 text-sm font-semibold transition-colors"
+                "inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-black/10 bg-white hover:bg-gray-50 text-sm font-semibold transition-colors cursor-pointer"
             }
             aria-label="Logout"
         >
+            <ArrowRightOnRectangleIcon className="w-5 h-5" />
             Logout
         </button>
     );
